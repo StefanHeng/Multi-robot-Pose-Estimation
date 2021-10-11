@@ -8,9 +8,9 @@ from util import *
 def callback(data):
     # rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data)
     # rospy.loginfo(f'{rospy.get_caller_id()}: {type(data)}')
-    rospy.loginfo(f'{data.header.stamp.secs, type(data.header.stamp)}')
+    # rospy.loginfo(f'{data.header.stamp.secs, type(data.header.stamp)}')
     # rospy.loginfo(f'{data.angle_min, type(data.angle_min)}')
-    rospy.loginfo(f'{laser_scan2dict(data)}')
+    rospy.loginfo('ran')
     jw(laser_scan2dict(data))
 
 def listener():
@@ -28,10 +28,10 @@ def listener():
     rospy.spin()
 
 if __name__ == '__main__':
-    fnm = 'HSR laser'
+    fnm = 'HSR laser 2'
+    jw = JsonWriter(fnm)
 
     def _run():
-        jw = JsonWriter(fnm)
         listener()
     
     def _check():
