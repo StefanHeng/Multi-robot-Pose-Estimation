@@ -8,3 +8,16 @@ Project under [Barton Research Group](https://brg.engin.umich.edu), via [Multidi
 
 
 
+## Setup 
+
+Go to the `src` folder, run 
+
+```bash
+$ catkin_make
+$ source devel/setup.<your-shell-extension>
+```
+
+For example, for bash shells, run the `setup.bash` file. 
+
+
+
