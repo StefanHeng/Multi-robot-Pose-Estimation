@@ -19,5 +19,7 @@ $ source devel/setup.<your-shell-extension>
 
 For example, for bash shells, run the `setup.bash` file. 
 
+Python version: `3.8.10`. 
+
 
 
