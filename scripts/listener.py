@@ -3,10 +3,15 @@
 import rospy
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
-
+from util import *
 
 def callback(data):
-    rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data)
+    # rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data)
+    # rospy.loginfo(f'{rospy.get_caller_id()}: {type(data)}')
+    rospy.loginfo(f'{data.header.stamp.secs, type(data.header.stamp)}')
+    # rospy.loginfo(f'{data.angle_min, type(data.angle_min)}')
+    rospy.loginfo(f'{laser_scan2dict(data)}')
+    jw(laser_scan2dict(data))
 
 def listener():
 
@@ -23,4 +28,16 @@ def listener():
     rospy.spin()
 
 if __name__ == '__main__':
-    listener()
+    fnm = 'HSR laser'
+
+    def _run():
+        jw = JsonWriter(fnm)
+        listener()
+    
+    def _check():
+        with open(f'{fnm}.json') as f:
+            l = json.load(f)
+            ic(len(l))
+
+    # _run()
+    _check()
