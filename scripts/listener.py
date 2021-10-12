@@ -5,6 +5,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
 from util import *
 
+
 def callback(data):
     # rospy.loginfo(rospy.get_caller_id() + 'I heard %s', data)
     # rospy.loginfo(f'{rospy.get_caller_id()}: {type(data)}')
@@ -12,6 +13,7 @@ def callback(data):
     # rospy.loginfo(f'{data.angle_min, type(data.angle_min)}')
     rospy.loginfo('ran')
     jw(laser_scan2dict(data))
+
 
 def listener():
 
@@ -26,6 +28,7 @@ def listener():
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
+
 
 if __name__ == '__main__':
     fnm = 'HSR laser 2'

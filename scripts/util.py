@@ -15,6 +15,7 @@ class JsonWriter:
         json.dump(self.data, f, indent=4)
         # ic(self.data)
 
+
 def laser_scan2dict(data):
     """
     :param data: Of type [sensor_msgs/LaserScan](http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html)
@@ -39,6 +40,7 @@ def laser_scan2dict(data):
         ranges=data.ranges,
         intensities=data.intensities
     )
+
 
 if __name__ == '__main__':
     def _create():
