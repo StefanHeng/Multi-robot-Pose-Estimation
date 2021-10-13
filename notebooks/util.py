@@ -1,5 +1,7 @@
+import numpy as np
 from functools import reduce
 from collections.abc import Iterable
+import matplotlib.pyplot as plt
 from icecream import ic
 
 
@@ -37,3 +39,15 @@ def pp(scan, n=5):
             return v[:n] if isinstance(v, Iterable) else v
         print(f'{k: <20} {_get()}')
 
+
+def assert_arr_same(arr):
+    """ Assert array contains the same elements """
+    np.testing.assert_equal(arr, np.full(arr.shape, arr[0]))
+
+
+def plot_1d(arr, label=None):
+    plt.figure(figsize=(16, 9))
+    plt.plot(np.arange(arr.size), arr, label=label, marker='o', markersize=0.3, linewidth=0.25)
+    if label:
+        plt.legend()
+    plt.show()
