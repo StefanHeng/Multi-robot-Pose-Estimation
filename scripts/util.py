@@ -1,12 +1,21 @@
 import json
+from functools import reduce
 from icecream import ic
 
 
+def get(dic, keys):
+    return reduce(lambda acc, elm: acc[elm], keys, dic)
+
+
 class JsonWriter:
+    """
+    Each time the object is called, the data is appended to the end of a list which is serialized to a JSON file
+    """
+
     def __init__(self, fnm):
         self.fnm = fnm
         self.data = []
-        self.fnm_ext = f'{self.fnm}.json'
+        self.fnm_ext = f'data/{self.fnm}.json'
         open(self.fnm_ext, 'a').close()  # Create file in OS
 
     def __call__(self, data):
@@ -18,7 +27,7 @@ class JsonWriter:
 
 def laser_scan2dict(data):
     """
-    :param data: Of type [sensor_msgs/LaserScan](http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html)
+    :param data: Of type [sensor_msgs/LaserScan](https://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html)
     """
     h = data.header
     d_h = dict(

@@ -55,7 +55,7 @@ CATKIN_IGNORE
 # Python
 .idea/
 .DS_Store
-data/
+#data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
