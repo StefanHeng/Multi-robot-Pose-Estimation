@@ -2,7 +2,8 @@ from icecream import ic
 
 
 if __name__ == '__main__':
-    pass
+    # pass
+
     # from functools import reduce
     # d = dict(
     #     a=dict(
@@ -47,4 +48,10 @@ if __name__ == '__main__':
     # # ic(list(keys(d)))
     # for key in keys(d):
     #     ic(key)
+
+    import subprocess
+
+    string = "echo Hello world"
+    result = subprocess.getoutput(string)
+    print("result::: ", result)
 
