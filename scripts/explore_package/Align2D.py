@@ -4,7 +4,10 @@ Modified from [LIDAR Odometry with ICP](http://andrewjkramer.net/lidar-odometry-
 import numpy as np
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
+import seaborn as sns
 from icecream import ic
+
+sns.set_style('dark')
 
 
 class Align2D:
@@ -185,10 +188,17 @@ if __name__ == '__main__':
     T = a2d.transform
     ic(T)
 
-    def _plot_clouds(p1, p2):
-        fig = plt.figure(figsize=(16, 9))
-        plt.scatter(p1[:, 0], p1[:, 1], marker='.', s=1.0, c='c')
-        plt.scatter(p2[:, 0], p2[:, 1], marker=',', s=1.0, c='m')
+    def _plot_clouds(p_s, p_t, title=None, save=False):
+        plt.figure(figsize=(16, 9), constrained_layout=True)
+        plt.scatter(p_s[:, 0], p_s[:, 1], marker='.', s=9, c='c', label='source')
+        plt.scatter(p_t[:, 0], p_t[:, 1], marker='.', s=9, c='m', label='target')
+        t = 'Point Clouds'
+        if title:
+            t = f'{t}, {title}'
+        plt.title(t)
+        plt.legend()
+        if save:
+            plt.savefig(f'plot/{t}.png', dpi=300)
         plt.show()
 
 
@@ -210,7 +220,7 @@ if __name__ == '__main__':
     # Break down into rotation & translation
     np.testing.assert_equal(source_[:, :-1], s @ r.T + t.reshape(1, -1))
 
-    # _plot_clouds(source_points, target_points)
-    # _plot_clouds(source_, target_points)
+    _plot_clouds(src_pts, tgt_pts, title='Initial', save=True)
+    _plot_clouds(source_, tgt_pts, title='Final', save=True)
 
 

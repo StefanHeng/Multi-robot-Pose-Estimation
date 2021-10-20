@@ -48,72 +48,28 @@ class PoseEstimator:
                 """
                 dist, idxs_ = self.tree_tgt.query(src[:, :2])
                 idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T
-                # ic(idxs_pair[:10])
                 # Keep pairs with distinct target points by removing pairs with larger distance
                 arg_idxs = dist.argsort()
                 idxs_pair_sort = idxs_pair[arg_idxs]
-                # ic(idxs_pair_sort)
 
                 idxs_sort = idxs_[arg_idxs]
-                src_sort = src[arg_idxs]
-                tgt_sort = self.tgt[idxs_sort]
-                # ic(idxs_, idxs_sort)
-                vals_unique, idxs_unique = np.unique(idxs_sort, return_index=True)
 
-                src_f = src_sort[idxs_unique]
-                tgt_f = tgt_sort[idxs_unique]
-                dist_sort = dist[arg_idxs]
-                # ic(dist_sort[idxs_unique][:10])
-                dists_ = np.linalg.norm(src_f - tgt_f, axis=-1)
-                matched_src_pts = src[:, :2]
-                unique = False
-                while not unique:
-                    unique = True
-                    for i in range(len(idxs_)):
-                        if idxs_[i] == -1:
-                            continue
-                        for j in range(i + 1, len(idxs_)):
-                            if idxs_[i] == idxs_[j]:
-                                if dist[i] < dist[j]:
-                                    idxs_[j] = -1
-                                else:
-                                    idxs_[i] = -1
-                                    break
-                # build array of nearest neighbor target points
-                # and remove unmatched source points
-                point_list = []
-                src_idx = 0
-                for idx in idxs_:
-                    if idx != -1:
-                        point_list.append(self.tgt[idx, :])
-                        src_idx += 1
-                    else:
-                        matched_src_pts = np.delete(matched_src_pts, src_idx, axis=0)
+                def _get_idx(arr):
+                    def _get(i):
+                        """
+                        If arr[i[ is not the first occurrence, it's set to -1
+                        """
+                        i_ = arr_idx(arr, arr[i])
+                        return arr[i] if i_ == i else -1
+                    return _get
 
-                matched_pts = np.array(point_list)
-
-                # ic(sum(map(lambda x: x != -1, idxs_)))
-                tgt_ps = matched_pts[:, :2]
-                dists = np.linalg.norm(tgt_ps - matched_src_pts, axis=-1)
-                # ic(dists[20:40])
-                # ic(dists_[20:40])
-                np.testing.assert_equal(np.sort(dists), np.sort(dists_))
-                # exit(1)
-                # ic(vals_unique, idxs_unique)
-                # Corresponding index of each source point to target if possible
-                def _get_idx(i):
-                    i_ = arr_idx(idxs_sort, idxs_sort[i])
-                    return idxs_sort[i] if i_ == i else -1
-                idxs_src2tgt = np.vectorize(_get_idx)(np.arange(idxs_sort.size))
-                idxs_pair_unique = idxs_pair_sort[np.where(idxs_src2tgt != -1)]
-                # ic(idxs_src2tgt, idxs_pair_unique.shape)
-
-
-                idx_sorted = idxs_pair_unique[idxs_pair_unique[:, 1].argsort()]
-                # ic(idx_sorted)
-
-                # return src_sort[idxs_unique][:, :2], tgt_sort[idxs_unique][:, :2], idxs_pair_unique
-                return src_sort[idxs_unique][:, :2], tgt_sort[idxs_unique][:, :2], idx_sorted
+                idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
+                idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+                return (
+                    src[idxs_pair_uniq[:, 0]][:, :2],
+                    self.tgt[idxs_pair_uniq[:, 1]][:, :2],
+                    idxs_pair_uniq
+                )
 
             while d_err > min_d_err and n < max_iter:
                 src_match, tgt_match, idxs = nn_tgt()
@@ -123,8 +79,6 @@ class PoseEstimator:
                 # ic(t)
                 # ic(idxs)
                 src = self.src @ t.T
-
-                dists = []
 
                 # # find mean squared error between transformed source points and target points
                 # new_err = 0
@@ -144,12 +98,8 @@ class PoseEstimator:
                 # new_err /= float(len(tgt_match))
 
                 def _err():
-                    # ic(idxs[:, 0])
                     src_ = src[idxs[:, 0]]
-                    tgt_ = self.tgt[idxs[:, 1]]
-                    # ic(src_[:, :2] - tgt_[:, :2])
-                    # ic(np.sum(np.square(src_[:, :2] - tgt_[:, :2]), axis=-1))
-                    return np.sum(np.square(src_[:, :2] - tgt_[:, :2]))  / idxs.shape[0]
+                    return np.sum(np.square(src_[:, :2] - tgt_match[:, :2])) / idxs.shape[0]
 
                 ic(_err())
                 # ic(idxs[:, 0], idxs[:, 1])
