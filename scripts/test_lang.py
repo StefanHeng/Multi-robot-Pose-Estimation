@@ -55,12 +55,23 @@ if __name__ == '__main__':
     # result = subprocess.getoutput(string)
     # print("result::: ", result)
 
-    # Sort one array based on another array
+    # # Sort one array based on another array
+    # import numpy as np
+    # arr1 = np.array([4, 2, 6, 1, 12, 9])
+    # arr2 = np.array([2, 3, 1, 5, 8, 23])
+    # idxs = arr1.argsort()  # Sort in ascending order
+    # ic(idxs)
+    # ic(arr1[idxs])
+    # ic(arr2[idxs])
+
     import numpy as np
-    arr1 = np.array([4, 2, 6, 1, 12, 9])
-    arr2 = np.array([2, 3, 1, 5, 8, 23])
-    idxs = arr1.argsort()  # Sort in ascending order
-    ic(idxs)
-    ic(arr1[idxs])
-    ic(arr2[idxs])
+    # arr = np.array([2, 3, 2, 3, 3, 2])
+    #
+    # def idx(a, v):
+    #     return np.where(a == v)[0][0]
+    # ic(idx(arr, 2))
+    # ic(idx(arr, 3))
+    diff = np.array([0.1, 0.2, 0.3])
+    ic(np.dot(diff, diff.T))
+    ic(np.sum(np.square(diff)))
 

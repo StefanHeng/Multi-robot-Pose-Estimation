@@ -41,6 +41,7 @@ class Align2D:
 
             # find correspondences via nearest-neighbor search
             matched_trg_pts, matched_src_pts, indices = self.find_correspondences(tf_source)
+            ic(np.sort(matched_trg_pts)[:10])
             ic(indices)
 
             # find alignment between source and corresponding target points via SVD
@@ -52,20 +53,30 @@ class Align2D:
             # a = T
             # a @= new_T
             T = np.dot(T, new_T)
+            ic(T)
             # np.testing.assert_equal(T, a)
 
             # apply transformation to the source points
             np.testing.assert_equal(np.dot(self.source, T.T), self.source @ T.T)
             tf_source = np.dot(self.source, T.T)
 
+            dists = []
+
             # find mean squared error between transformed source points and target points
             new_err = 0
             for i in range(len(indices)):
                 if indices[i] != -1:
                     diff = tf_source[i, :2] - self.target[indices[i], :2]
-                    new_err += np.dot(diff, diff.T)
+                    ic(tf_source[i, :2], self.target[indices[i], :2])
+                    # ic(i, indices[i], diff)
+                    d = np.dot(diff, diff.T)
+                    new_err += d
+                    dists.append((tf_source[i, :2], d))
 
+            ic(sorted(dists, key=lambda x: x[-1])[:10])
             new_err /= float(len(matched_trg_pts))
+            ic(new_err)
+            exit(1)
 
             # update error and calculate delta error
             delta_err = abs(mean_sq_error - new_err)
@@ -112,6 +123,8 @@ class Align2D:
                 matched_src_pts = np.delete(matched_src_pts, src_idx, axis=0)
 
         matched_pts = np.array(point_list)
+
+        ic(indices)
 
         return matched_pts[:, :2], matched_src_pts, indices
 

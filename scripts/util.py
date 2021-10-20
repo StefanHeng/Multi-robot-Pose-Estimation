@@ -1,6 +1,14 @@
+import numpy as np
 import json
 from functools import reduce
 from icecream import ic
+
+
+def arr_idx(a, v):
+    """
+    :return: 1st occurrence index of `v` in `a`, a numpy 1D array
+    """
+    return np.where(a == v)[0][0]
 
 
 def get(dic, keys):
