@@ -24,21 +24,23 @@ class PoseEstimator:
             """
             return np.hstack([arr, np.ones([arr.shape[0], 1])])
 
-        def __init__(self, src, tgt, t=np.identity(3)):
+        def __init__(self, src, tgt, ):
             """
             :param src:  Array of source points
             :param tgt: Array of target points
-            :param t: Initial estimate of T
             """
             self.src = self.extend_1s(src)
             self.tgt = self.extend_1s(tgt)
-            self.t = t
             self.tree_tgt = KDTree(tgt)
 
-        def __call__(self, max_iter=20, min_d_err=1e-4):
-            err = 10e6  # init with large values
-            d_err = 10e6  # change in error (used in stopping condition)
-            t = self.t
+        def __call__(self, transf=np.identity(3), max_iter=20, min_d_err=1e-4):
+            """
+            :param transf: Initial transformation estimate
+            :param max_iter: Max iteration, stopping criteria
+            :param min_d_err: Minimal change in error, stopping criteria
+            """
+            err = float('inf')
+            d_err = float('inf')
             n = 0
             src = self.src
 
@@ -47,11 +49,10 @@ class PoseEstimator:
                 Finds nearest neighbors in the target
                 """
                 dist, idxs_ = self.tree_tgt.query(src[:, :2])
-                idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T
                 # Keep pairs with distinct target points by removing pairs with larger distance
+                idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
                 arg_idxs = dist.argsort()
                 idxs_pair_sort = idxs_pair[arg_idxs]
-
                 idxs_sort = idxs_[arg_idxs]
 
                 def _get_idx(arr):
@@ -73,97 +74,50 @@ class PoseEstimator:
 
             while d_err > min_d_err and n < max_iter:
                 src_match, tgt_match, idxs = nn_tgt()
-                # ic(np.sort(tgt_match)[:10])
-                # ic(tgts.shape, srcs.shape, idxs.shape)
-                t = t @ self.svd(src_match, tgt_match)
-                # ic(t)
-                # ic(idxs)
-                src = self.src @ t.T
-
-                # # find mean squared error between transformed source points and target points
-                # new_err = 0
-                # for i in range(len(idxs)):
-                #     if idxs[i] != -1:
-                #         # ic(i, idxs[i])
-                #         diff = src[idxs[i], :2] - self.tgt[idxs[i], :2]
-                #         d = np.dot(diff, diff.T)
-                #         new_err += d
-                #         dists.append((src[idxs[i], :2], d))
-                #
-                # ic(sorted(dists, key=lambda x: x[-1])[:10])
-                # # dists = np.sort(np.array(dists))
-                # # dists_ = np.sort(np.square(src_match[:, :2] - tgt_match[:, :2]))
-                # # ic(dists, dists_)
-                #
-                # new_err /= float(len(tgt_match))
+                transf = transf @ self.svd(src_match, tgt_match)
+                src = self.src @ transf.T
 
                 def _err():
                     src_ = src[idxs[:, 0]]
                     return np.sum(np.square(src_[:, :2] - tgt_match[:, :2])) / idxs.shape[0]
 
-                ic(_err())
-                # ic(idxs[:, 0], idxs[:, 1])
-                # for i in range(10):
-                #     s = src[idxs[i, 0]]
-                #     t = self.tgt[idxs[i, 1]]
-                #     ic(s - t)
-
-                # update error and calculate delta error
                 err_ = _err()
-                d_err = abs(err - err_)
+                assert err > err_
+                d_err = err - err_
                 err = err_
-                # ic(new_err, _err())
-
-                # exit(1)
-
                 n += 1
-                # ic(d_err, n)
+            return transf
 
-            return t
-
-        def svd(self, source, target):
+        @staticmethod
+        def svd(src, tgt):
             """
-            Singular value decomposition to find the transformation from the target to the source point cloud
-            assumes source and target point clouds are ordered such that corresponding points are at the same indices
-            in each array
+            Singular value decomposition for points in 2D
 
-            :param source: numpy array representing source pointcloud
-            :param target: numpy array representing target pointcloud
-            :return: T: transformation between the two point clouds
+            :return: T: transformation matrix
             """
-
-            # first find the centroids of both point clouds
-
-            def _mean(pts):
+            def _centroid(pts):
                 return np.sum(pts, axis=0) / pts.shape[0]
 
-            c_src = _mean(source)
-            c_tgt = _mean(target)
+            c_src = _centroid(src)
+            c_tgt = _centroid(tgt)
+            src_c = src - c_src
+            tgt_c = tgt - c_tgt
 
-            # get the point clouds in reference to their centroids
-            src_c = source - c_src
-            tgt_c = target - c_tgt
-
-            # get cross covariance matrix M
-            M = np.dot(tgt_c.T, src_c)
-
-            # get singular value decomposition of the cross covariance matrix
+            M = tgt_c.T @ src_c
+            # np.testing.assert_equal(np.dot(tgt_c.T, src_c), tgt_c.T @ src_c)
             U, W, V_t = np.linalg.svd(M)
+            rot_mat = U @ V_t
+            # np.testing.assert_equal(np.dot(U, V_t), U @ V_t)
 
-            # get rotation between the two point clouds
-            R = np.dot(U, V_t)
-
-            # get the translation (simply the difference between the point cloud centroids)
-            t = np.expand_dims(c_tgt, 0).T - np.dot(R, np.expand_dims(c_src, 0).T)
-
-            # assemble translation and rotation into a transformation matrix
-            T = np.identity(3)
-            T[:2, 2] = np.squeeze(t)
-            T[:2, :2] = R
-            # ic(t.shape, t, T[:2, 2])
-            # ic(R.shape, R, T[:2, :2])
-
-            return T
+            transla = c_tgt - rot_mat @ c_src
+            # np.testing.assert_array_equal(
+            #     np.squeeze(np.expand_dims(c_tgt, 0).T - np.dot(rot_mat, np.expand_dims(c_src, 0).T)),
+            #     c_tgt - rot_mat @ c_src
+            # )
+            transf = np.identity(3)
+            transf[:2, 2] = transla
+            transf[:2, :2] = rot_mat
+            return transf
 
 
 if __name__ == '__main__':
@@ -171,7 +125,7 @@ if __name__ == '__main__':
 
     src_pts = src_pts[:, :2]  # Expect 2-dim data points
     tgt_pts = tgt_pts[:, :2]
-    ic(src_pts.shape, tgt_pts.shape)
+    # ic(src_pts.shape, tgt_pts.shape)
 
     t = PoseEstimator.Icp(src_pts, tgt_pts)()
     ic(t)
