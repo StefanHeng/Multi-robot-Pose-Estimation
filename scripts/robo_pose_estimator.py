@@ -84,6 +84,10 @@ class PoseEstimator:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+
+            # idxs_pair_uniq = idxs_pair_uniq[np.argsort(idxs_pair_uniq[:, 0])]
+            # ic(idxs_pair_uniq)
+            # exit(1)
             return (
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
@@ -112,6 +116,28 @@ class PoseEstimator:
             transf[:2, 2] = transla
             transf[:2, :2] = rot_mat
             return transf
+
+            # # get the point clouds in reference to their centroids
+            # source_centered = src - c_src
+            # target_centered = tgt - c_tgt
+            #
+            # # get cross covariance matrix M
+            # M = np.dot(target_centered.T, source_centered)
+            #
+            # # get singular value decomposition of the cross covariance matrix
+            # U, W, V_t = np.linalg.svd(M)
+            #
+            # # get rotation between the two point clouds
+            # R = np.dot(U, V_t)
+            #
+            # # get the translation (simply the difference between the point cloud centroids)
+            # t = np.expand_dims(c_src, 0).T - np.dot(R, np.expand_dims(c_tgt, 0).T)
+            #
+            # # assemble translation and rotation into a transformation matrix
+            # T = np.identity(3)
+            # T[:2, 2] = np.squeeze(t)
+            # T[:2, :2] = R
+            # return T
 
 
 if __name__ == '__main__':

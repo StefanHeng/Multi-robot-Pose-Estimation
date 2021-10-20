@@ -20,7 +20,7 @@ class TestIcp:
 
 
 if __name__ == '__main__':
-    np.random.seed(77)
+    np.random.seed(7)
     # ic(src_pts.shape, tgt_pts.shape)
     ti = TestIcp()
     # ti(src_pts, tgt_pts)
@@ -34,11 +34,14 @@ if __name__ == '__main__':
 
     # # n_max = 10
     # n_max = 6
-    # n = 100
-    # idx_strt = np.random.randint(dl.ranges.shape[0] - n_max, size=n)
+    # n = 1000
+    # n_measure = dl.ranges.shape[0]
+    # counts = np.arange(n)
+    # idx_strt = np.random.randint(n_measure - n_max, size=n)
     # span = np.random.randint(1, high=n_max, size=n)
-    # for (i_s, s) in np.vstack([idx_strt, span]).T:
-    #     ic(i_s, s)
+    # for (count, i_s, s) in np.vstack([counts, idx_strt, span]).T:
+    #     ic(count, i_s, s)
     #     _test(i_s, i_s+s)
 
-    _test(11644, 11644 + 4)
+    # _test(11644, 11644 + 4)  # An example with seed 77
+    _test(6600, 6600 + 4)  # An example with seed 7
