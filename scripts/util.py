@@ -59,6 +59,29 @@ def laser_scan2dict(data):
     )
 
 
+def laser_range2polar(a_max, a_min):
+    """
+    :param a_max: Maximum angle
+    :param a_min: Minimum angle
+    :return: A function that returns an array of 2D points
+
+    Assumes the angles are [a_min, a_max)
+    """
+    def _get(ranges):
+        """
+        :param ranges: Array of laser scan ranges
+
+        Number of beams taken from size of `range`;
+        """
+        theta = np.linspace(a_min, a_max, num=ranges.size + 1)[:-1]
+        return np.vstack([
+            ranges * np.cos(theta),
+            ranges * np.sin(theta)
+        ]).T
+
+    return _get
+
+
 if __name__ == '__main__':
     def _create():
         jw = JsonWriter('jw')

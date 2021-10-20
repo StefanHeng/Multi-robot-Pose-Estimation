@@ -24,7 +24,6 @@ class Align2D:
         self.target = target_points
         self.init_T = initial_T
         self.target_tree = KDTree(target_points[:, :2])
-        # ic(target_points[:, :2].shape)
         self.transform = self.align_icp(20, 1.0e-4)
 
     def align_icp(self, max_iter, min_delta_err):
@@ -41,49 +40,34 @@ class Align2D:
         tf_source = self.source
 
         while delta_err > min_delta_err and num_iter < max_iter:
-
             # find correspondences via nearest-neighbor search
             matched_trg_pts, matched_src_pts, indices = self.find_correspondences(tf_source)
-            # ic(np.sort(matched_trg_pts)[:10])
-            # ic(indices)
 
             # find alignment between source and corresponding target points via SVD
             # note: svd step doesn't use homogeneous points
             new_T = self.align_svd(matched_src_pts, matched_trg_pts)
+            ic(new_T)
 
             # update transformation between point sets
             np.testing.assert_equal(np.dot(T, new_T), T @ new_T)
-            # a = T
-            # a @= new_T
             T = np.dot(T, new_T)
-            # ic(T)
-            # np.testing.assert_equal(T, a)
 
             # apply transformation to the source points
             np.testing.assert_equal(np.dot(self.source, T.T), self.source @ T.T)
             tf_source = np.dot(self.source, T.T)
-
-            dists = []
 
             # find mean squared error between transformed source points and target points
             new_err = 0
             for i in range(len(indices)):
                 if indices[i] != -1:
                     diff = tf_source[i, :2] - self.target[indices[i], :2]
-                    # ic(tf_source[i, :2], self.target[indices[i], :2])
-                    # ic(i, indices[i], diff)
-                    d = np.dot(diff, diff.T)
-                    # ic(np.dot(diff, diff.T))
-                    new_err += d
-                    dists.append((tf_source[i, :2], d))
+                    new_err += np.dot(diff, diff.T)
 
-            # ic(sorted(dists, key=lambda x: x[-1])[:10])
             new_err /= float(len(matched_trg_pts))
-            ic(new_err)
-            # exit(1)
 
             # update error and calculate delta error
             delta_err = abs(mean_sq_error - new_err)
+            ic(new_err, delta_err)
             mean_sq_error = new_err
 
             num_iter += 1
@@ -128,8 +112,6 @@ class Align2D:
 
         matched_pts = np.array(point_list)
 
-        # ic(indices)
-
         return matched_pts[:, :2], matched_src_pts, indices
 
     def align_svd(self, source, target):
@@ -167,12 +149,10 @@ class Align2D:
         T = np.identity(3)
         T[:2, 2] = np.squeeze(t)
         T[:2, :2] = R
-        # ic(t.shape, t, T[:2, 2])
-        # ic(R.shape, R, T[:2, :2])
-
         return T
 
-    def get_centroid(self, points):
+    @staticmethod
+    def get_centroid(points):
         point_sum = np.sum(points, axis=0)
         return point_sum / float(len(points))
 
