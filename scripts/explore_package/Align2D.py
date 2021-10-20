@@ -21,7 +21,7 @@ class Align2D:
         self.target = target_points
         self.init_T = initial_T
         self.target_tree = KDTree(target_points[:, :2])
-        ic(target_points[:, :2].shape)
+        # ic(target_points[:, :2].shape)
         self.transform = self.align_icp(20, 1.0e-4)
 
     def align_icp(self, max_iter, min_delta_err):
@@ -41,8 +41,8 @@ class Align2D:
 
             # find correspondences via nearest-neighbor search
             matched_trg_pts, matched_src_pts, indices = self.find_correspondences(tf_source)
-            ic(np.sort(matched_trg_pts)[:10])
-            ic(indices)
+            # ic(np.sort(matched_trg_pts)[:10])
+            # ic(indices)
 
             # find alignment between source and corresponding target points via SVD
             # note: svd step doesn't use homogeneous points
@@ -53,7 +53,7 @@ class Align2D:
             # a = T
             # a @= new_T
             T = np.dot(T, new_T)
-            ic(T)
+            # ic(T)
             # np.testing.assert_equal(T, a)
 
             # apply transformation to the source points
@@ -67,16 +67,17 @@ class Align2D:
             for i in range(len(indices)):
                 if indices[i] != -1:
                     diff = tf_source[i, :2] - self.target[indices[i], :2]
-                    ic(tf_source[i, :2], self.target[indices[i], :2])
+                    # ic(tf_source[i, :2], self.target[indices[i], :2])
                     # ic(i, indices[i], diff)
                     d = np.dot(diff, diff.T)
+                    # ic(np.dot(diff, diff.T))
                     new_err += d
                     dists.append((tf_source[i, :2], d))
 
-            ic(sorted(dists, key=lambda x: x[-1])[:10])
+            # ic(sorted(dists, key=lambda x: x[-1])[:10])
             new_err /= float(len(matched_trg_pts))
             ic(new_err)
-            exit(1)
+            # exit(1)
 
             # update error and calculate delta error
             delta_err = abs(mean_sq_error - new_err)
@@ -124,7 +125,7 @@ class Align2D:
 
         matched_pts = np.array(point_list)
 
-        ic(indices)
+        # ic(indices)
 
         return matched_pts[:, :2], matched_src_pts, indices
 

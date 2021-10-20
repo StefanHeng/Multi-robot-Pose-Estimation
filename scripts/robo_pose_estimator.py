@@ -52,7 +52,7 @@ class PoseEstimator:
                 # Keep pairs with distinct target points by removing pairs with larger distance
                 arg_idxs = dist.argsort()
                 idxs_pair_sort = idxs_pair[arg_idxs]
-                ic(idxs_pair_sort)
+                # ic(idxs_pair_sort)
 
                 idxs_sort = idxs_[arg_idxs]
                 src_sort = src[arg_idxs]
@@ -92,25 +92,25 @@ class PoseEstimator:
 
                 matched_pts = np.array(point_list)
 
-                ic(sum(map(lambda x: x != -1, idxs_)))
+                # ic(sum(map(lambda x: x != -1, idxs_)))
                 tgt_ps = matched_pts[:, :2]
                 dists = np.linalg.norm(tgt_ps - matched_src_pts, axis=-1)
                 # ic(dists[20:40])
                 # ic(dists_[20:40])
                 np.testing.assert_equal(np.sort(dists), np.sort(dists_))
                 # exit(1)
-                ic(vals_unique, idxs_unique)
+                # ic(vals_unique, idxs_unique)
                 # Corresponding index of each source point to target if possible
                 def _get_idx(i):
                     i_ = arr_idx(idxs_sort, idxs_sort[i])
                     return idxs_sort[i] if i_ == i else -1
                 idxs_src2tgt = np.vectorize(_get_idx)(np.arange(idxs_sort.size))
                 idxs_pair_unique = idxs_pair_sort[np.where(idxs_src2tgt != -1)]
-                ic(idxs_src2tgt, idxs_pair_unique.shape)
+                # ic(idxs_src2tgt, idxs_pair_unique.shape)
 
 
                 idx_sorted = idxs_pair_unique[idxs_pair_unique[:, 1].argsort()]
-                ic(idx_sorted)
+                # ic(idx_sorted)
 
                 # return src_sort[idxs_unique][:, :2], tgt_sort[idxs_unique][:, :2], idxs_pair_unique
                 return src_sort[idxs_unique][:, :2], tgt_sort[idxs_unique][:, :2], idx_sorted
@@ -120,7 +120,7 @@ class PoseEstimator:
                 # ic(np.sort(tgt_match)[:10])
                 # ic(tgts.shape, srcs.shape, idxs.shape)
                 t = t @ self.svd(src_match, tgt_match)
-                ic(t)
+                # ic(t)
                 # ic(idxs)
                 src = self.src @ t.T
 
@@ -144,25 +144,27 @@ class PoseEstimator:
                 # new_err /= float(len(tgt_match))
 
                 def _err():
-                    ic(idxs[:, 0])
+                    # ic(idxs[:, 0])
                     src_ = src[idxs[:, 0]]
                     tgt_ = self.tgt[idxs[:, 1]]
-                    ic(np.square(src_[:, :2] - tgt_[:, :2]))
-                    return np.sum(np.square(src_[:, :2] - tgt_[:, :2]))
+                    # ic(src_[:, :2] - tgt_[:, :2])
+                    # ic(np.sum(np.square(src_[:, :2] - tgt_[:, :2]), axis=-1))
+                    return np.sum(np.square(src_[:, :2] - tgt_[:, :2]))  / idxs.shape[0]
 
                 ic(_err())
-                ic(idxs[:, 0], idxs[:, 1])
-                for i in range(10):
-                    s = src[idxs[i, 0]]
-                    t = self.tgt[idxs[i, 1]]
-                    ic(s - t)
+                # ic(idxs[:, 0], idxs[:, 1])
+                # for i in range(10):
+                #     s = src[idxs[i, 0]]
+                #     t = self.tgt[idxs[i, 1]]
+                #     ic(s - t)
 
                 # update error and calculate delta error
-                d_err = abs(err - new_err)
-                err = new_err
-                ic(new_err, _err())
+                err_ = _err()
+                d_err = abs(err - err_)
+                err = err_
+                # ic(new_err, _err())
 
-                exit(1)
+                # exit(1)
 
                 n += 1
                 # ic(d_err, n)
