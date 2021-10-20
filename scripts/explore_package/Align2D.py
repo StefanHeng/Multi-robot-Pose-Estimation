@@ -3,6 +3,7 @@ Modified from [LIDAR Odometry with ICP](http://andrewjkramer.net/lidar-odometry-
 """
 import numpy as np
 from scipy.spatial import KDTree
+import matplotlib.pyplot as plt
 from icecream import ic
 
 
@@ -20,6 +21,7 @@ class Align2D:
         self.target = target_points
         self.init_T = initial_T
         self.target_tree = KDTree(target_points[:, :2])
+        ic(target_points[:, :2].shape)
         self.transform = self.align_icp(20, 1.0e-4)
 
     def align_icp(self, max_iter, min_delta_err):
@@ -39,15 +41,21 @@ class Align2D:
 
             # find correspondences via nearest-neighbor search
             matched_trg_pts, matched_src_pts, indices = self.find_correspondences(tf_source)
+            ic(indices)
 
             # find alignment between source and corresponding target points via SVD
             # note: svd step doesn't use homogeneous points
             new_T = self.align_svd(matched_src_pts, matched_trg_pts)
 
             # update transformation between point sets
+            np.testing.assert_equal(np.dot(T, new_T), T @ new_T)
+            # a = T
+            # a @= new_T
             T = np.dot(T, new_T)
+            # np.testing.assert_equal(T, a)
 
             # apply transformation to the source points
+            np.testing.assert_equal(np.dot(self.source, T.T), self.source @ T.T)
             tf_source = np.dot(self.source, T.T)
 
             # find mean squared error between transformed source points and target points
@@ -142,6 +150,8 @@ class Align2D:
         T = np.identity(3)
         T[:2, 2] = np.squeeze(t)
         T[:2, :2] = R
+        # ic(t.shape, t, T[:2, 2])
+        # ic(R.shape, R, T[:2, :2])
 
         return T
 
@@ -151,9 +161,42 @@ class Align2D:
 
 
 if __name__ == '__main__':
+    import math
+
     from irc_laser_data_eg import *
-    ic(source_points.shape, target_points.shape)
-    a2d = Align2D(source_points, target_points, np.identity(3))
-    ic(a2d.transform)
+    ic(src_pts[:5], tgt_pts[:5])
+    # ic(source_points[:, -1], target_points[:, -1])
+    ic(src_pts.shape, tgt_pts.shape)
+    a2d = Align2D(src_pts, tgt_pts, np.identity(3))
+    T = a2d.transform
+    ic(T)
+
+    def _plot_clouds(p1, p2):
+        fig = plt.figure(figsize=(16, 9))
+        plt.scatter(p1[:, 0], p1[:, 1], marker='.', s=1.0, c='c')
+        plt.scatter(p2[:, 0], p2[:, 1], marker=',', s=1.0, c='m')
+        plt.show()
+
+
+    source_ = np.dot(src_pts, T.T)
+    # ic(source_[:, -1])
+
+    r = T[:2, :2]
+    t = T[:2, 2]
+    angle = math.acos(r[0][0])
+    ic(math.degrees(angle), t)
+    t_ = np.array(list(t) + [1])
+    s = src_pts[:, :-1]
+    ic(s.shape, t.shape)
+    ic((s @ r.T).shape, t.shape)
+    ic(source_[:10])
+    s_ = s @ r.T + t.reshape(1, -1)
+    ic(s_[:10])
+
+    # Break down into rotation & translation
+    np.testing.assert_equal(source_[:, :-1], s @ r.T + t.reshape(1, -1))
+
+    # _plot_clouds(source_points, target_points)
+    # _plot_clouds(source_, target_points)
 
 

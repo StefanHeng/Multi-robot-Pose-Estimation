@@ -49,9 +49,18 @@ if __name__ == '__main__':
     # for key in keys(d):
     #     ic(key)
 
-    import subprocess
+    # import subprocess
+    #
+    # string = "echo Hello world"
+    # result = subprocess.getoutput(string)
+    # print("result::: ", result)
 
-    string = "echo Hello world"
-    result = subprocess.getoutput(string)
-    print("result::: ", result)
+    # Sort one array based on another array
+    import numpy as np
+    arr1 = np.array([4, 2, 6, 1, 12, 9])
+    arr2 = np.array([2, 3, 1, 5, 8, 23])
+    idxs = arr1.argsort()  # Sort in ascending order
+    ic(idxs)
+    ic(arr1[idxs])
+    ic(arr2[idxs])
 
