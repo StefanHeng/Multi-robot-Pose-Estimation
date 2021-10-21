@@ -84,6 +84,7 @@ def plot_laser(ranges, a_max, a_min, title=None, save=False, polar=False):
         ax.set_theta_offset(-np.pi / 2.0)
     else:
         x, y = laser_polar2planar(a_max, a_min, split=True)(r)
+
         plt.plot(x, y, marker='o', ms=0.3, lw=0.25)
         plt.plot(0, 0, marker='o', ms=4)
 

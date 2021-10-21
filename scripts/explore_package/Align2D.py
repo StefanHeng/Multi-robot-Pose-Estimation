@@ -165,8 +165,8 @@ if __name__ == '__main__':
     # ic(source_points[:, -1], target_points[:, -1])
     ic(src_pts.shape, tgt_pts.shape)
     a2d = Align2D(src_pts, tgt_pts, np.identity(3))
-    T = a2d.transform
-    ic(T)
+    tsf = a2d.transform
+    ic(tsf)
 
     def _plot_clouds(p_s, p_t, title=None, save=False):
         plt.figure(figsize=(16, 9), constrained_layout=True)
@@ -182,23 +182,24 @@ if __name__ == '__main__':
         plt.show()
 
 
-    source_ = np.dot(src_pts, T.T)
+    # source_ = np.dot(src_pts, T.T)
+    source_ = src_pts @ tsf.T
     # ic(source_[:, -1])
 
-    r = T[:2, :2]
-    t = T[:2, 2]
-    angle = math.acos(r[0][0])
-    ic(math.degrees(angle), t)
-    t_ = np.array(list(t) + [1])
+    rot = tsf[:2, :2]
+    tsl = tsf[:2, 2]
+    angle = math.acos(rot[0][0])
+    ic(math.degrees(angle), tsl)
+    t_ = np.array(list(tsl) + [1])
     s = src_pts[:, :-1]
-    ic(s.shape, t.shape)
-    ic((s @ r.T).shape, t.shape)
+    ic(s.shape, tsl.shape)
+    ic((s @ rot.T).shape, tsl.shape)
     ic(source_[:10])
-    s_ = s @ r.T + t.reshape(1, -1)
+    s_ = s @ rot.T + tsl.reshape(1, -1)
     ic(s_[:10])
 
     # Break down into rotation & translation
-    np.testing.assert_equal(source_[:, :-1], s @ r.T + t.reshape(1, -1))
+    np.testing.assert_equal(source_[:, :-1], s @ rot.T + tsl.reshape(1, -1))
 
     _plot_clouds(src_pts, tgt_pts, title='Initial', save=True)
     _plot_clouds(source_, tgt_pts, title='Final', save=True)

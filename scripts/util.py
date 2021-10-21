@@ -1,6 +1,6 @@
 import numpy as np
 import json
-from math import pi
+from math import pi, acos
 from functools import reduce
 
 import matplotlib.pyplot as plt
@@ -64,6 +64,14 @@ def laser_scan2dict(data):
         ranges=data.ranges,
         intensities=data.intensities
     )
+
+
+def extend_1s(arr):
+    """
+    Return array with column of 1's appended
+    :param arr: 2D array
+    """
+    return np.hstack([arr, np.ones([arr.shape[0], 1])])
 
 
 def polar2planar(dist, angle):
@@ -154,6 +162,99 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
         plt.show()
     intersec = intersec_rect(*boundaries)
     return np.apply_along_axis(lambda i: intersec(*i), 1, np.vstack([x, y]).T)
+
+
+def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split=False):
+    """
+    Assumes 2d data
+    """
+    # ic(src.shape, tsf.shape)
+    src_ = src @ tsf.T
+    # ic(src_)
+    ori = np.array([0, 0])
+    ori_tsl = tsf[:2, 2]
+    ori_tsf = np.array([[0, 0, 1]]) @ tsf.T
+    ori_tsf = np.squeeze(ori_tsf)[:2]
+    ic(tsf)
+    angle = acos(tsf[0][0])
+    ic(ori_tsl, ori_tsf, angle)
+    unit_sqr = np.array([
+        [0, 0],
+        [0, 1],
+        [1, 1],
+        [1, 0],
+        [0, 0]
+    ])
+    unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf.T)[:, :2]
+
+    def _plot_point_cloud(arr, label, **kwargs):
+        # plt.scatter(arr[:, 0], arr[:, 1], marker='.', s=4, c=c, label=label)
+        kwargs_ = dict(
+            c='orange',
+            marker='.',
+            ms=1,
+            lw=0.5,
+        )
+        # for k, v in kwargs.items():
+        #     if v is None:
+        #         del kwargs_[k]
+        # ic((kwargs_ | kwargs))
+        plt.plot(arr[:, 0], arr[:, 1], label=label, **(kwargs_ | kwargs))
+
+    def _plot_line_seg(c1, c2, **kwargs):
+        kwargs_ = dict(
+            marker='o',
+            c='orange',
+            ms=2,
+            lw=1,
+            ls='dotted'
+        )
+        plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **(kwargs_ | kwargs))
+
+    def _plot_matched_points(src_, tgt_, **kwargs):
+        for s_, t_ in zip(src_, tgt_):
+            _plot_line_seg(s_, t_, **kwargs)
+
+    fig = plt.figure(figsize=(16, 9), constrained_layout=True)
+    if split:
+        ax = fig.add_subplot(1, 2, 1)
+
+        pass
+
+    else:
+        # plt.plot(0, 0, marker='o', ms=4, c='orange')
+        # plt.plot(*origin_shift, marker='o', ms=4, c='orange')
+        # _plot_line_seg(ori, ori_tsl)
+        # _plot_line_seg(ori_tsl, ori_tsf)
+        _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
+        _plot_point_cloud(unit_sqr_tsf, 'unit square, transformed', alpha=0.8, ms=0.5, marker=None)
+        for i in zip(unit_sqr, unit_sqr_tsf):
+            _plot_line_seg(*i, alpha=0.3, marker=None)
+        if lst_match:
+            _plot_matched_points(*lst_match[0], c='g', ms=1, ls='solid', alpha=0.5)
+            _plot_matched_points(*lst_match[-1], c='g', ms=1, ls='solid')
+
+        # for args in zip(
+        #         [src, tgt, ],
+        #         ['source', 'target', 'source, transformed'],
+        #         ['c', 'm', 'c'],
+        #         [dict(alpha=0.5), dict(), dict()]
+        # ):
+        _plot_point_cloud(src, 'source', c='c', alpha=0.5)
+        _plot_point_cloud(tgt, 'target', c='m')
+        _plot_point_cloud(src @ tsf.T, 'source, transformed', c='c')
+
+    t = 'ICP results'
+    if split:
+        t = f'{t} split'
+    if title:
+        t = f'{t}, {title}'
+    plt.title(t)
+    plt.legend()
+    plt.gca().set_aspect('equal')
+    if save:
+        plt.savefig(f'plot/{t}.png', dpi=300)
+    plt.show()
 
 
 if __name__ == '__main__':
