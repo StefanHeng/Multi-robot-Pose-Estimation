@@ -8,7 +8,7 @@ import numpy as np
 from math import pi
 from icecream import ic
 
-from scripts.util import laser_range2polar
+from scripts.util import laser_polar2planar
 
 
 class DataLoader:
@@ -24,7 +24,7 @@ class DataLoader:
         idx_strt = 2
         ranges = list(map(lambda l: np.array(list(map(float, l[idx_strt: idx_strt+self.N_LSBM]))), lines))
         self.ranges = np.vstack(ranges)
-        self.range2polar = laser_range2polar(self.ANGLE_MAX, self.ANGLE_MIN)
+        self.range2polar = laser_polar2planar(self.ANGLE_MAX, self.ANGLE_MIN)
 
     def __getitem__(self, idx):
         """

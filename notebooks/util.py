@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from icecream import ic
 
-sns.set_style('dark')
+from scripts.util import laser_polar2planar
+
+sns.set_style('darkgrid')
 
 
 def get_scans(fnm):
@@ -69,23 +71,28 @@ def plot_1d(arr, label=None):
     plt.show()
 
 
-def plot_laser(scan, title=None, save=False):
-    a_max, a_min = scan['angle_max'], scan['angle_min']
-    n_beams = round(((a_max - a_min) / scan['angle_increment']) + 1)
-    theta = np.linspace(a_min, a_max, num=n_beams)
+def plot_laser(ranges, a_max, a_min, title=None, save=False, polar=False):
+    r = np.array(ranges)
 
-    plt.figure(figsize=(16, 9))
-    ax = plt.subplot(1, 1, 1, polar=True)
-    ax.plot(theta, np.array(scan['ranges']), marker='o', ms=0.3, lw=0.25)
-    ax.plot(0, 0, marker='o', ms=4)
-    ax.set_theta_offset(-np.pi / 2.0)
+    plt.figure(figsize=(16, 9), constrained_layout=True)
 
-    t = 'Laser scan range plot'
+    if polar:
+        theta = np.linspace(a_min, a_max, num=r.size)
+        ax = plt.subplot(1, 1, 1, polar=True)
+        ax.plot(theta, r, marker='o', ms=0.3, lw=0.25)
+        ax.plot(0, 0, marker='o', ms=4)
+        ax.set_theta_offset(-np.pi / 2.0)
+    else:
+        x, y = laser_polar2planar(a_max, a_min, split=True)(r)
+        plt.plot(x, y, marker='o', ms=0.3, lw=0.25)
+        plt.plot(0, 0, marker='o', ms=4)
+
+    t = f'Laser scan range {"polar" if polar else "planar"} plot'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
     if save:
-        plt.savefig(f'{title}.png', dpi=300)
+        plt.savefig(f'{t}.png', dpi=300)
     plt.show()
 
 
@@ -95,4 +102,8 @@ if __name__ == '__main__':
 
     fnms = sys_out('ls').split('\n')
     s = get_scans(fnms[0])[0]
-    plot_laser(s, title='HSR laser scan', save=True)
+
+    def _map(s):
+        return [s['ranges'], s['angle_max'], s['angle_min']]
+
+    plot_laser(*_map(s), title='HSR laser scan', save=True)
