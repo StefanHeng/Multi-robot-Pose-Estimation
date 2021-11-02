@@ -1,15 +1,16 @@
 import numpy as np
 from icecream import ic
 
+from util import *
 from explore_package.irc_laser_data_eg import src_pts, tgt_pts
 from explore_package.Align2D import Align2D
-from robo_pose_estimator import PoseEstimator
+from robo_pose_estimator import Icp
 from explore_package.irl_data_loader import DataLoader
 
 
 class TestIcp:
     def __init__(self):
-        self.mine = PoseEstimator.Icp
+        self.mine = Icp
         self.ori = Align2D
 
     def __call__(self, src, tgt):
@@ -28,20 +29,20 @@ if __name__ == '__main__':
     dl = DataLoader(prefix='explore_package')
 
     def _test(i_strt, i_end):
-        src = ti.mine.extend_1s(dl[i_strt])
-        tgt = ti.mine.extend_1s(dl[i_end])
+        src = extend_1s(dl[i_strt])
+        tgt = extend_1s(dl[i_end])
         ti(src, tgt)
 
-    # # n_max = 10
-    # n_max = 6
-    # n = 1000
-    # n_measure = dl.ranges.shape[0]
-    # counts = np.arange(n)
-    # idx_strt = np.random.randint(n_measure - n_max, size=n)
-    # span = np.random.randint(1, high=n_max, size=n)
-    # for (count, i_s, s) in np.vstack([counts, idx_strt, span]).T:
-    #     ic(count, i_s, s)
-    #     _test(i_s, i_s+s)
+    # n_max = 10
+    n_max = 6
+    n = 100
+    n_measure = dl.ranges.shape[0]
+    counts = np.arange(n)
+    idx_strt = np.random.randint(n_measure - n_max, size=n)
+    span = np.random.randint(1, high=n_max, size=n)
+    for (count, i_s, s) in np.vstack([counts, idx_strt, span]).T:
+        ic(count, i_s, s)
+        _test(i_s, i_s+s)
 
     # _test(11644, 11644 + 4)  # An example with seed 77
-    _test(6600, 6600 + 4)  # An example with seed 7
+    # _test(6600, 6600 + 4)  # An example with seed 7

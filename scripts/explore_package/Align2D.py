@@ -161,12 +161,16 @@ if __name__ == '__main__':
     import math
 
     from irc_laser_data_eg import *
+    # from scripts.robo_pose_estimator import Icp
+
     ic(src_pts[:5], tgt_pts[:5])
     # ic(source_points[:, -1], target_points[:, -1])
     ic(src_pts.shape, tgt_pts.shape)
     a2d = Align2D(src_pts, tgt_pts, np.identity(3))
     tsf = a2d.transform
     ic(tsf)
+    # tsf = Icp(src_pts, tgt_pts)(np.identity(3))
+    # ic(tsf)
 
     def _plot_clouds(p_s, p_t, title=None, save=False):
         plt.figure(figsize=(16, 9), constrained_layout=True)

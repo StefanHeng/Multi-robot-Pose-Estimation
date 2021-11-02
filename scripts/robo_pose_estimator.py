@@ -27,13 +27,15 @@ class Icp:
         :param tsf: Initial transformation estimate
         :param max_iter: Max iteration, stopping criteria
         :param min_d_err: Minimal change in error, stopping criteria
-        :param lst_match: List of source-target tuple matched points in each iteration
-        :param match: If true, keep track of source-target tuple matched points in each iteration
+        :param lst_match: List of source-target matched points in each iteration
+        :param match: If true, keep track of source-target matched points in each iteration
         """
         err = float('inf')
         d_err = float('inf')
         n = 0
+        # src = self.src @ tsf.T
         src = self.src
+        # ic(tsf)
 
         # if match:
         #     lst_match = []
@@ -140,14 +142,19 @@ class PoseEstimator:
             # tsf = Icp(pts_a, self.pc_b)()
             # plot_icp_result(extend_1s(pts_a), self.pc_b, tsf, title='default init', save=True)
 
-            def visualize(a, b, title):
+            def visualize(a, b, title, tsf=np.identity(3)):
                 l_m = []
-                tsf = Icp(a, b)(lst_match=l_m, match=True)
-                # ic(l_m)
+                tsf = Icp(a, b)(tsf=tsf, lst_match=l_m, match=True, max_iter=100, min_d_err=1e-6)
+                ic('final ICP output', tsf)
                 plot_icp_result(extend_1s(a), b, tsf, title=title, save=True, lst_match=l_m, split=False)
 
             # visualize(pts_a, self.pc_b, 'default init from HSR')
-            visualize(self.pc_b, pts_a, 'default init from KUKA shape')
+            # visualize(self.pc_b, pts_a, 'default init from KUKA shape')
+            visualize(self.pc_b, pts_a, 'default init from KUKA shape, best translation guess', tsf=np.array([
+                [1, 0, 3],
+                [0, 1, -0.5],
+                [0, 0, 1]
+            ]))
 
     class FuseLaser:
         """

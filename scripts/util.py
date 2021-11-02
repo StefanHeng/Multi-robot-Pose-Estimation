@@ -169,9 +169,10 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
     Assumes 2d data
     """
     # ic(src.shape, tsf.shape)
-    src_ = src @ tsf.T
+    # src_ = src @ tsf.T
     # ic(src_)
-    ori = np.array([0, 0])
+    # ori = np.array([0, 0])
+    ic()
     ori_tsl = tsf[:2, 2]
     ori_tsf = np.array([[0, 0, 1]]) @ tsf.T
     ori_tsf = np.squeeze(ori_tsf)[:2]
@@ -211,8 +212,8 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
         )
         plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **(kwargs_ | kwargs))
 
-    def _plot_matched_points(src_, tgt_, **kwargs):
-        for s_, t_ in zip(src_, tgt_):
+    def _plot_matched_points(src__, tgt__, **kwargs):
+        for s_, t_ in zip(src__, tgt__):
             _plot_line_seg(s_, t_, **kwargs)
 
     fig = plt.figure(figsize=(16, 9), constrained_layout=True)
@@ -243,6 +244,9 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
         _plot_point_cloud(src, 'source', c='c', alpha=0.5)
         _plot_point_cloud(tgt, 'target', c='m')
         _plot_point_cloud(src @ tsf.T, 'source, transformed', c='c')
+
+        plt.xlim([-2, 5])
+        plt.ylim([-2, 1])
 
     t = 'ICP results'
     if split:
