@@ -5,12 +5,54 @@ from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 from icecream import ic
 
-from notebooks.util import *
 from util import *
 
 
 class Cluster:
     RDS = 77  # Random state
+
+    @staticmethod
+    def cluster(x, approach='spectral', **kwargs):
+        d_kwargs = dict(
+            spectral=dict(
+                assign_labels='discretize',
+                random_state=Cluster.RDS
+            ),
+            hierarchical=dict(
+                n_clusters=None,
+                linkage='average'
+            ),
+            gaussian=dict(
+                random_state=Cluster.RDS
+            ),
+            dbscan=dict()
+        )
+
+        kwargs = d_kwargs[approach] | kwargs
+
+        def spectral():
+            assert 'n_clusters' in kwargs
+            return SpectralClustering(**kwargs).fit(x).labels_
+
+        def hierarchical():
+            assert 'distance_threshold' in kwargs
+            return AgglomerativeClustering(**kwargs).fit(x).labels_
+
+        def gaussian():
+            assert 'n_components' in kwargs
+            return GaussianMixture(**kwargs).fit(x).predict(x)
+
+        def dbscan():
+            assert 'eps' in kwargs and 'min_samples' in kwargs
+            return DBSCAN(**kwargs).fit(x).labels_
+
+        d_f = dict(
+            spectral=spectral,
+            hierarchical=hierarchical,
+            gaussian=gaussian,
+            dbscan=dbscan
+        )
+        return d_f[approach]()
 
     def __init__(self, n_clusters=6):
         self.spectral = SpectralClustering(n_clusters=n_clusters, assign_labels='discretize', random_state=self.RDS)
@@ -43,6 +85,14 @@ class Cluster:
         return d_f[approach]()
 
 
+def extend_1s(arr):  # The jupyter notebook `explore_fuse_pose` seems to require this???
+    """
+    Return array with column of 1's appended
+    :param arr: 2D array
+    """
+    return np.hstack([arr, np.ones([arr.shape[0], 1])])
+
+
 class Icp:
     """
     Implementation of ICP algorithm in 2D
@@ -58,7 +108,7 @@ class Icp:
         self.tgt = extend_1s(tgt)
         self.tree_tgt = KDTree(tgt)
 
-    def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, lst_match=None, match=False):
+    def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, lst_match=None):
         """
         :param tsf: Initial transformation estimate
         :param max_iter: Max iteration, stopping criteria
@@ -69,17 +119,13 @@ class Icp:
         err = float('inf')
         d_err = float('inf')
         n = 0
-        # src = self.src @ tsf.T
         src = self.src
-        # ic(tsf)
-
-        # if match:
-        #     lst_match = []
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
-            if match:
+            if lst_match:
                 lst_match.append((src_match, tgt_match))
+            # ic(tsf)
             tsf = tsf @ self.svd(src_match, tgt_match)
             src = self.src @ tsf.T
 
@@ -103,6 +149,12 @@ class Icp:
         arg_idxs = dist.argsort()
         idxs_pair_sort = idxs_pair[arg_idxs]
         idxs_sort = idxs_[arg_idxs]
+
+        def arr_idx(a, v):
+            """
+            :return: 1st occurrence index of `v` in `a`, a numpy 1D array
+            """
+            return np.where(a == v)[0][0]
 
         def _get_idx(arr):
             def _get(i):
@@ -151,6 +203,10 @@ class PoseEstimator:
     """
     Various laser-based pose estimation algorithms between KUKA iiwa and HSR robot
     """
+
+    def __init__(self):
+        pass
+
     L_KUKA = 2
     W_KUKA = 0.8
 
@@ -230,18 +286,37 @@ if __name__ == '__main__':
         pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
         fp(pts_a=pts)
 
+    check_icp_hsr()
+
     def clustering_sanity_check():
         hsr_scans = json_load('../data/HSR laser 2.json')
         s = hsr_scans[77]
         pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
 
-        c = Cluster(n_clusters=6)
-        lbs = c(pts, approach='hierarchical')
-        plot_cluster(pts, lbs, title='Hierarchical on HSR, avg threshold=2', save=True)
-        lbs = c(pts, approach='dbscan')
-        plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
+        c = Cluster.cluster
 
-    clustering_sanity_check()
+        def sp():
+            lbs = c(pts, approach='spectral', n_clusters=8)
+            ic(lbs)
+            plot_cluster(pts, lbs, title='Spectral on HSR', save=True)
+
+        def hi():
+            d = 2
+            lbs = c(pts, approach='hierarchical', distance_threshold=d)
+            plot_cluster(pts, lbs, title=f'Hierarchical on HSR, avg threshold={d}', save=True)
+
+        def ga():
+            lbs = c(pts, approach='gaussian', n_components=6)
+            plot_cluster(pts, lbs, title='Gaussian on HSR, eps=0.5', save=True)
+
+        def db():
+            lbs = c(pts, approach='dbscan', eps=0.5, min_samples=16)
+            plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
+
+        # sp()
+        hi()
+
+    # clustering_sanity_check()
 
 
 

@@ -19,13 +19,6 @@ def json_load(fnm):
     return scans
 
 
-def arr_idx(a, v):
-    """
-    :return: 1st occurrence index of `v` in `a`, a numpy 1D array
-    """
-    return np.where(a == v)[0][0]
-
-
 def get(dic, keys):
     return reduce(lambda acc, elm: acc[elm], keys, dic)
 
@@ -176,17 +169,11 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
     """
     Assumes 2d data
     """
-    # ic(src.shape, tsf.shape)
-    # src_ = src @ tsf.T
-    # ic(src_)
-    # ori = np.array([0, 0])
-    ic()
     ori_tsl = tsf[:2, 2]
-    ori_tsf = np.array([[0, 0, 1]]) @ tsf.T
-    ori_tsf = np.squeeze(ori_tsf)[:2]
-    ic(tsf)
+    # ori_tsf = np.array([[0, 0, 1]]) @ tsf.T
+    # ori_tsf = np.squeeze(ori_tsf)[:2]
     angle = acos(tsf[0][0])
-    ic(ori_tsl, ori_tsf, angle)
+    ic(tsf, ori_tsl, angle)
     unit_sqr = np.array([
         [0, 0],
         [0, 1],
