@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import numpy as np
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
@@ -116,6 +118,7 @@ class Icp:
         :param lst_match: List of source-target matched points in each iteration
         :param match: If true, keep track of source-target matched points in each iteration
         """
+        tsf = deepcopy(tsf)
         err = float('inf')
         d_err = float('inf')
         n = 0
@@ -123,7 +126,7 @@ class Icp:
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
-            if lst_match:
+            if lst_match is not None:
                 lst_match.append((src_match, tgt_match))
             # ic(tsf)
             tsf = tsf @ self.svd(src_match, tgt_match)
@@ -199,6 +202,13 @@ class Icp:
         return tsf
 
 
+def visualize(a, b, tsf=np.identity(3), **kwargs):
+    l_m = []
+    init_tsf = tsf
+    tsf = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, lst_match=l_m)
+    plot_icp_result(extend_1s(a), b, tsf, lst_match=l_m, init_tsf=init_tsf, **kwargs)
+
+
 class PoseEstimator:
     """
     Various laser-based pose estimation algorithms between KUKA iiwa and HSR robot
@@ -234,15 +244,9 @@ class PoseEstimator:
             # tsf = Icp(pts_a, self.pc_b)()
             # plot_icp_result(extend_1s(pts_a), self.pc_b, tsf, title='default init', save=True)
 
-            def visualize(a, b, title, tsf=np.identity(3)):
-                l_m = []
-                tsf = Icp(a, b)(tsf=tsf, lst_match=l_m, match=True, max_iter=100, min_d_err=1e-6)
-                ic('final ICP output', tsf)
-                plot_icp_result(extend_1s(a), b, tsf, title=title, save=True, lst_match=l_m, split=False)
-
             # visualize(pts_a, self.pc_b, 'default init from HSR')
             # visualize(self.pc_b, pts_a, 'default init from KUKA shape')
-            visualize(self.pc_b, pts_a, 'default init from KUKA shape, best translation guess', tsf=np.array([
+            visualize(self.pc_b, pts_a, tsf=np.array([
                 [1, 0, 3],
                 [0, 1, -0.5],
                 [0, 0, 1]
@@ -269,54 +273,71 @@ if __name__ == '__main__':
         t = Icp(s_pts, t_pts)()
         ic(t)
 
+    # icp_sanity_check()
+
+    pc_kuka = get_rect_pointcloud(
+        PoseEstimator.L_KUKA,
+        PoseEstimator.W_KUKA,
+    )
+    hsr_scans = json_load('../data/HSR laser 2.json')
+    s = hsr_scans[77]
+    pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+
     def check_icp_hsr():
         # Empirically have `robot_a` as HSR, `robot_b` as KUKA
-        fp = PoseEstimator.FusePose(pc_b=get_rect_pointcloud(
-                    PoseEstimator.L_KUKA,
-                    PoseEstimator.W_KUKA,
-        ))
+        fp = PoseEstimator.FusePose(pc_b=pc_kuka)
         ic(fp.pc_b.shape)
 
-        hsr_scans = json_load('../data/HSR laser 2.json')
-        ic(len(hsr_scans))
-        s = hsr_scans[77]
-        # del s['ranges']
-        # del s['intensities']
-        # ic(s)
-        pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
-        fp(pts_a=pts)
+        title = 'default init from KUKA shape, good translation guess'
+        init_tsf = np.array([
+            [1, 0, 3],
+            [0, 1, -0.5],
+            [0, 0, 1]
+        ])
+        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], save=True)
 
     check_icp_hsr()
 
+    c = Cluster.cluster
+
     def clustering_sanity_check():
-        hsr_scans = json_load('../data/HSR laser 2.json')
-        s = hsr_scans[77]
-        pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
-
-        c = Cluster.cluster
-
         def sp():
             lbs = c(pts, approach='spectral', n_clusters=8)
-            ic(lbs)
             plot_cluster(pts, lbs, title='Spectral on HSR', save=True)
 
-        def hi():
-            d = 2
+        def hi(d):
             lbs = c(pts, approach='hierarchical', distance_threshold=d)
             plot_cluster(pts, lbs, title=f'Hierarchical on HSR, avg threshold={d}', save=True)
 
         def ga():
             lbs = c(pts, approach='gaussian', n_components=6)
-            plot_cluster(pts, lbs, title='Gaussian on HSR, eps=0.5', save=True)
+            plot_cluster(pts, lbs, title='Gaussian Mixture on HSR', save=True)
 
         def db():
             lbs = c(pts, approach='dbscan', eps=0.5, min_samples=16)
             plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
 
-        # sp()
-        hi()
+        sp()
+        hi(1)
+        hi(2)
+        ga()
+        db()
 
     # clustering_sanity_check()
+
+    def icp_after_cluster():
+        lbs = c(pts, approach='hierarchical', distance_threshold=1)   # A good clustering result by empirical inspection
+        d_clusters = {lb: pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
+
+        cls = d_clusters[11]  # The cluster indicating real location of KUKA
+
+        title = 'HSR locates KUKA, from the real cluster'
+        tsf = np.identity(3)
+        tsf[:2, -1] = cls.mean(axis=0)
+        ic('init', tsf)
+        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 12], ylim=[-2, 12], save=True)
+
+    icp_after_cluster()
 
 
 

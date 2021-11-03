@@ -165,13 +165,12 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
     return np.apply_along_axis(lambda i: intersec(*i), 1, np.vstack([x, y]).T)
 
 
-def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split=False):
+def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, xlim=None, ylim=None,
+                    init_tsf=np.identity(3)):
     """
     Assumes 2d data
     """
     ori_tsl = tsf[:2, 2]
-    # ori_tsf = np.array([[0, 0, 1]]) @ tsf.T
-    # ori_tsf = np.squeeze(ori_tsf)[:2]
     angle = acos(tsf[0][0])
     ic(tsf, ori_tsl, angle)
     unit_sqr = np.array([
@@ -182,19 +181,17 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
         [0, 0]
     ])
     unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf.T)[:, :2]
+    ic(unit_sqr)
+    # unit_sqr = (extend_1s(unit_sqr) @ init_tsf.T)[:, :2]  # Apply initial guess
+    # ic(unit_sqr)
 
     def _plot_point_cloud(arr, label, **kwargs):
-        # plt.scatter(arr[:, 0], arr[:, 1], marker='.', s=4, c=c, label=label)
         kwargs_ = dict(
             c='orange',
             marker='.',
             ms=1,
             lw=0.5,
         )
-        # for k, v in kwargs.items():
-        #     if v is None:
-        #         del kwargs_[k]
-        # ic((kwargs_ | kwargs))
         plt.plot(arr[:, 0], arr[:, 1], label=label, **(kwargs_ | kwargs))
 
     def _plot_line_seg(c1, c2, **kwargs):
@@ -211,55 +208,47 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
         for s_, t_ in zip(src__, tgt__):
             _plot_line_seg(s_, t_, **kwargs)
 
-    fig = plt.figure(figsize=(16, 9), constrained_layout=True)
-    if split:
-        ax = fig.add_subplot(1, 2, 1)
+    x_rang, y_rang = (abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])) if xlim and ylim else (np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1]))
+    ratio = 1 / x_rang * y_rang
+    plt.figure(figsize=(12, 12 * ratio), constrained_layout=True)
+    plt.plot(0, 0, marker='o', c='orange', ms=4)
+    _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
+    _plot_point_cloud(unit_sqr_tsf, 'unit square, ICP output', alpha=0.8, ms=0.5, marker=None)
+    for i in zip(unit_sqr, unit_sqr_tsf):
+        _plot_line_seg(*i, alpha=0.3, marker=None)
+    if lst_match:
+        _plot_matched_points(*lst_match[0], c='g', ms=1, ls='solid', alpha=0.5)
+        _plot_matched_points(*lst_match[-1], c='g', ms=1, ls='solid')
 
-        pass
+    _plot_point_cloud(src, 'source', c='c', alpha=0.5)
+    if not np.array_equal(init_tsf, np.identity(3)):
+        _plot_point_cloud(src @ init_tsf.T, 'source, initial guess', c='c', alpha=0.5)
+    _plot_point_cloud(tgt, 'target', c='m')
+    _plot_point_cloud(src @ tsf.T, 'source, transformed', c='c')
 
-    else:
-        # plt.plot(0, 0, marker='o', ms=4, c='orange')
-        # plt.plot(*origin_shift, marker='o', ms=4, c='orange')
-        # _plot_line_seg(ori, ori_tsl)
-        # _plot_line_seg(ori_tsl, ori_tsf)
-        _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
-        _plot_point_cloud(unit_sqr_tsf, 'unit square, transformed', alpha=0.8, ms=0.5, marker=None)
-        for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, alpha=0.3, marker=None)
-        if lst_match:
-            _plot_matched_points(*lst_match[0], c='g', ms=1, ls='solid', alpha=0.5)
-            _plot_matched_points(*lst_match[-1], c='g', ms=1, ls='solid')
-
-        # for args in zip(
-        #         [src, tgt, ],
-        #         ['source', 'target', 'source, transformed'],
-        #         ['c', 'm', 'c'],
-        #         [dict(alpha=0.5), dict(), dict()]
-        # ):
-        _plot_point_cloud(src, 'source', c='c', alpha=0.5)
-        _plot_point_cloud(tgt, 'target', c='m')
-        _plot_point_cloud(src @ tsf.T, 'source, transformed', c='c')
-
-        plt.xlim([-2, 5])
-        plt.ylim([-2, 1])
+    if xlim:
+        plt.xlim(xlim)
+    if ylim:
+        plt.ylim(ylim)
 
     t = 'ICP results'
-    if split:
-        t = f'{t} split'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
     plt.legend()
     plt.gca().set_aspect('equal')
+    if save:
+        plt.savefig(f'plot/{t}.png', dpi=300)
     plt.show()
 
 
-def plot_cluster(x, labels, title=None, save=False):
-    fig, ax = plt.subplots(figsize=(16, 9), constrained_layout=True)
-    d_clusters = {lb: x[np.where(labels == lb)] for lb in np.unique(labels)}
+def plot_cluster(data, labels, title=None, save=False):
+    d_clusters = {lb: data[np.where(labels == lb)] for lb in np.unique(labels)}
 
     cs = iter(sns.color_palette(palette='husl', n_colors=len(d_clusters) + 1))
-    plt.plot(x[:, 0], x[:, 1], marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole')
+    x, y = data[:, 0], data[:, 1]
+    fig, ax = plt.subplots(figsize=(12, 12 / np.ptp(x) * np.ptp(y)), constrained_layout=True)
+    plt.plot(x, y, marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole')
 
     for lb, d in d_clusters.items():
         x_, y_ = d[:, 0], d[:, 1]
@@ -300,8 +289,9 @@ def plot_cluster(x, labels, title=None, save=False):
     t = 'Clustering results'
     if title:
         t = f'{t}, {title}'
-    plt.legend()
     plt.title(t)
+    plt.legend()
+    plt.gca().set_aspect('equal')
     if save:
         plt.savefig(f'plot/{t}.png', dpi=300)
     plt.show()
