@@ -1,10 +1,46 @@
 import numpy as np
 from scipy.spatial import KDTree
+from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
+from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 from icecream import ic
 
 from notebooks.util import *
 from util import *
+
+
+class Cluster:
+    RDS = 77  # Random state
+
+    def __init__(self, n_clusters=6):
+        self.spectral = SpectralClustering(n_clusters=n_clusters, assign_labels='discretize', random_state=self.RDS)
+        self.hierarchical = AgglomerativeClustering(n_clusters=None, linkage='average', distance_threshold=2)
+        self.gaussian = GaussianMixture(n_components=n_clusters, random_state=self.RDS)
+        self.dbscan = DBSCAN(eps=0.5, min_samples=16)
+
+    def __call__(self, x, approach):
+        """
+        :param x: Array of 2D points to cluster
+        """
+        def spectral():
+            return self.spectral.fit(x).labels_
+
+        def hierarchical():
+            return self.hierarchical.fit(x).labels_
+
+        def gaussian():
+            return self.gaussian.fit(x).predict(x)
+
+        def dbscan():
+            return self.dbscan.fit(x).labels_
+
+        d_f = dict(
+            spectral=spectral,
+            hierarchical=hierarchical,
+            gaussian=gaussian,
+            dbscan=dbscan
+        )
+        return d_f[approach]()
 
 
 class Icp:
@@ -167,28 +203,45 @@ class PoseEstimator:
 
 
 if __name__ == '__main__':
-    # from explore_package.irc_laser_data_eg import *
-    #
-    # src_pts = src_pts[:, :2]  # Expect 2-dim data points
-    # tgt_pts = tgt_pts[:, :2]
-    # # ic(src_pts.shape, tgt_pts.shape)
-    #
-    # t = PoseEstimator.Icp(src_pts, tgt_pts)()
-    # ic(t)
+    from explore_package.irc_laser_data_eg import src_pts, tgt_pts
 
-    # Empirically have `robot_a` as HSR, `robot_b` as KUKA
-    fp = PoseEstimator.FusePose(pc_b=get_rect_pointcloud(
-                PoseEstimator.L_KUKA,
-                PoseEstimator.W_KUKA,
-    ))
-    ic(fp.pc_b.shape)
+    def icp_sanity_check():
+        s_pts = src_pts[:, :2]  # Expect 2-dim data points
+        t_pts = tgt_pts[:, :2]
+        # ic(src_pts.shape, tgt_pts.shape)
 
-    hsr_scans = get_scans('../data/HSR laser 2.json')
-    ic(len(hsr_scans))
-    s = hsr_scans[77]
-    # del s['ranges']
-    # del s['intensities']
-    # ic(s)
-    pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
-    fp(pts_a=pts)
+        t = Icp(s_pts, t_pts)()
+        ic(t)
+
+    def check_icp_hsr():
+        # Empirically have `robot_a` as HSR, `robot_b` as KUKA
+        fp = PoseEstimator.FusePose(pc_b=get_rect_pointcloud(
+                    PoseEstimator.L_KUKA,
+                    PoseEstimator.W_KUKA,
+        ))
+        ic(fp.pc_b.shape)
+
+        hsr_scans = json_load('../data/HSR laser 2.json')
+        ic(len(hsr_scans))
+        s = hsr_scans[77]
+        # del s['ranges']
+        # del s['intensities']
+        # ic(s)
+        pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+        fp(pts_a=pts)
+
+    def clustering_sanity_check():
+        hsr_scans = json_load('../data/HSR laser 2.json')
+        s = hsr_scans[77]
+        pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+
+        c = Cluster(n_clusters=6)
+        lbs = c(pts, approach='hierarchical')
+        plot_cluster(pts, lbs, title='Hierarchical on HSR, avg threshold=2', save=True)
+        lbs = c(pts, approach='dbscan')
+        plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
+
+    clustering_sanity_check()
+
+
 

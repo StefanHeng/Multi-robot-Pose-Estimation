@@ -12,13 +12,6 @@ from scripts.util import laser_polar2planar
 sns.set_style('darkgrid')
 
 
-def get_scans(fnm):
-    f = open(fnm, 'r')
-    scans = json.load(f)
-    f.close()
-    return scans
-
-
 def sys_out(cmd):
     return subprocess.getoutput(cmd)
 
@@ -78,7 +71,7 @@ def plot_laser(ranges, a_max, a_min, title=None, save=False, polar=False):
 
     if polar:
         theta = np.linspace(a_min, a_max, num=r.size)
-        ax = plt.subplot(1, 1, 1, polar=True)
+        ax = plt
         ax.plot(theta, r, marker='o', ms=0.3, lw=0.25)
         ax.plot(0, 0, marker='o', ms=4)
         ax.set_theta_offset(-np.pi / 2.0)
@@ -102,7 +95,7 @@ if __name__ == '__main__':
     os.chdir('../data')
 
     fnms = sys_out('ls').split('\n')
-    s = get_scans(fnms[0])[0]
+    s = json_load(fnms[0])[0]
 
     def _map(s):
         return [s['ranges'], s['angle_max'], s['angle_min']]

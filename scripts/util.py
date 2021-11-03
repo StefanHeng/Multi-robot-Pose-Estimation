@@ -4,11 +4,19 @@ from math import pi, acos
 from functools import reduce
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Ellipse
+import matplotlib.transforms as transforms
 import seaborn as sns
 from icecream import ic
 
 sns.set_style('darkgrid')
+
+
+def json_load(fnm):
+    f = open(fnm, 'r')
+    scans = json.load(f)
+    f.close()
+    return scans
 
 
 def arr_idx(a, v):
@@ -256,6 +264,57 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, split
     plt.title(t)
     plt.legend()
     plt.gca().set_aspect('equal')
+    plt.show()
+
+
+def plot_cluster(x, labels, title=None, save=False):
+    fig, ax = plt.subplots(figsize=(16, 9), constrained_layout=True)
+    d_clusters = {lb: x[np.where(labels == lb)] for lb in np.unique(labels)}
+
+    cs = iter(sns.color_palette(palette='husl', n_colors=len(d_clusters) + 1))
+    plt.plot(x[:, 0], x[:, 1], marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole')
+
+    for lb, d in d_clusters.items():
+        x_, y_ = d[:, 0], d[:, 1]
+        c = next(cs)
+
+        def confidence_ellipse(n_std=1., **kwargs):
+            """
+            Modified from https://matplotlib.org/stable/gallery/statistics/confidence_ellipse.html
+            Create a plot of the covariance confidence ellipse of x and y
+
+            :param n_std: number of standard deviations to determine the ellipse's radius'
+            :return matplotlib.patches.Ellipse
+            """
+            cov = np.cov(x_, y_)
+            pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+            ell_radius_x = np.sqrt(1 + pearson)
+            ell_radius_y = np.sqrt(1 - pearson)
+            ellipse = Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2,
+                              **(dict(fc='none') | kwargs))
+
+            tsf = transforms.Affine2D().rotate_deg(45)
+            tsf = tsf.scale(
+                np.sqrt(cov[0, 0]) * n_std,
+                np.sqrt(cov[1, 1]) * n_std
+            )
+            tsf = tsf.translate(np.mean(x_), np.mean(y_))
+
+            ellipse.set_transform(tsf + ax.transData)
+            return ax.add_patch(ellipse)
+
+        if lb != -1:  # Noise as in DBSCAN
+            confidence_ellipse(n_std=1.25, fc=c, alpha=0.25)
+
+        lb = f'Cluster {lb + 1}'
+        # plt.scatter(x_[:, 0], x_[:, 1], marker='.', s=2, label=lb)
+        ax.plot(x_, y_, marker='o', ms=0.5, lw=0.25, c=c, label=lb)
+
+    t = 'Clustering results'
+    if title:
+        t = f'{t}, {title}'
+    plt.legend()
+    plt.title(t)
     if save:
         plt.savefig(f'plot/{t}.png', dpi=300)
     plt.show()
@@ -276,8 +335,8 @@ if __name__ == '__main__':
     # _create()
     # _check()
 
-    pc = get_rect_pointcloud(2, 0.8, visualize=False)
-    plt.figure(figsize=(16, 9), constrained_layout=True)
-    plt.plot(pc[:, 0], pc[:, 1], marker='o', ms=1, lw=0.5)
-    plt.show()
-
+    def _kuka_pointcloud():
+        pc = get_rect_pointcloud(2, 0.8, visualize=False)
+        plt.figure(figsize=(16, 9), constrained_layout=True)
+        plt.plot(pc[:, 0], pc[:, 1], marker='o', ms=1, lw=0.5)
+        plt.show()

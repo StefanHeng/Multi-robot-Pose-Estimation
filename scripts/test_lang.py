@@ -64,14 +64,19 @@ if __name__ == '__main__':
     # ic(arr1[idxs])
     # ic(arr2[idxs])
 
-    import numpy as np
-    # arr = np.array([2, 3, 2, 3, 3, 2])
-    #
-    # def idx(a, v):
-    #     return np.where(a == v)[0][0]
-    # ic(idx(arr, 2))
-    # ic(idx(arr, 3))
-    diff = np.array([0.1, 0.2, 0.3])
-    ic(np.dot(diff, diff.T))
-    ic(np.sum(np.square(diff)))
+    # import numpy as np
+    # # arr = np.array([2, 3, 2, 3, 3, 2])
+    # #
+    # # def idx(a, v):
+    # #     return np.where(a == v)[0][0]
+    # # ic(idx(arr, 2))
+    # # ic(idx(arr, 3))
+    # diff = np.array([0.1, 0.2, 0.3])
+    # ic(np.dot(diff, diff.T))
+    # ic(np.sum(np.square(diff)))
+
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot([1, 2], [3, 4])
+    plt.show()
 
