@@ -116,16 +116,20 @@ class Icp:
         :param max_iter: Max iteration, stopping criteria
         :param min_d_err: Minimal change in error, stopping criteria
         :param lst_match: List of source-target matched points in each iteration
-        :param match: If true, keep track of source-target matched points in each iteration
         """
         tsf = deepcopy(tsf)
         err = float('inf')
         d_err = float('inf')
         n = 0
-        src = self.src
+        src = self.src  # TODO: implementation wrong with a different initial guess?
+
+        # ic(src[:10])
+        # src = self.src @ tsf.T
+        # ic(src[:10])
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
+            # ic(idxs[:10])
             if lst_match is not None:
                 lst_match.append((src_match, tgt_match))
             # ic(tsf)
@@ -323,7 +327,7 @@ if __name__ == '__main__':
         ga()
         db()
 
-    # clustering_sanity_check()
+    clustering_sanity_check()
 
     def icp_after_cluster():
         lbs = c(pts, approach='hierarchical', distance_threshold=1)   # A good clustering result by empirical inspection
@@ -337,7 +341,7 @@ if __name__ == '__main__':
         ic('init', tsf)
         visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 12], ylim=[-2, 12], save=True)
 
-    icp_after_cluster()
+    # icp_after_cluster()
 
 
 

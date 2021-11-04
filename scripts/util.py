@@ -181,9 +181,6 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, xlim=
         [0, 0]
     ])
     unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf.T)[:, :2]
-    ic(unit_sqr)
-    # unit_sqr = (extend_1s(unit_sqr) @ init_tsf.T)[:, :2]  # Apply initial guess
-    # ic(unit_sqr)
 
     def _plot_point_cloud(arr, label, **kwargs):
         kwargs_ = dict(
