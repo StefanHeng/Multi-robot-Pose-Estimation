@@ -1,3 +1,4 @@
+import sched, time
 from copy import deepcopy
 
 import numpy as np
@@ -110,18 +111,20 @@ class Icp:
         self.tgt = extend_1s(tgt)
         self.tree_tgt = KDTree(tgt)
 
-    def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, lst_match=None):
+    def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, verbose=False):
         """
         :param tsf: Initial transformation estimate
         :param max_iter: Max iteration, stopping criteria
         :param min_d_err: Minimal change in error, stopping criteria
-        :param lst_match: List of source-target matched points in each iteration
+        :param verbose: If true,
+            return additionally a list of source-target matched points & transformation for each iteration
         """
         tsf = deepcopy(tsf)
         err = float('inf')
         d_err = float('inf')
         n = 0
         src = self.src  # TODO: implementation wrong with a different initial guess?
+        states = []
 
         # ic(src[:10])
         # src = self.src @ tsf.T
@@ -130,11 +133,14 @@ class Icp:
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
             # ic(idxs[:10])
-            if lst_match is not None:
-                lst_match.append((src_match, tgt_match))
+            # if lst_match is not None:
+            #     lst_match.append((src_match, tgt_match))
             # ic(tsf)
             tsf = tsf @ self.svd(src_match, tgt_match)
             src = self.src @ tsf.T
+
+            if verbose:
+                states.append((src_match, tgt_match, tsf))
 
             def _err():
                 src_ = src[idxs[:, 0]]
@@ -144,7 +150,7 @@ class Icp:
             d_err = abs(err - err_)
             err = err_
             n += 1
-        return tsf
+        return (tsf, states) if verbose else tsf
 
     def nn_tgt(self, src):
         """
@@ -206,11 +212,31 @@ class Icp:
         return tsf
 
 
-def visualize(a, b, tsf=np.identity(3), **kwargs):
-    l_m = []
+def visualize(a, b, tsf=np.identity(3), animate=False, **kwargs):
     init_tsf = tsf
-    tsf = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, lst_match=l_m)
-    plot_icp_result(extend_1s(a), b, tsf, lst_match=l_m, init_tsf=init_tsf, **kwargs)
+    tsf, states = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, verbose=True)
+
+    # if animate:
+    #     sch = sched.scheduler(time.time, time.sleep)
+    #     ic(time.time, time.sleep)
+    #     ic('here')
+    #
+    #     def do_something(sc):
+    #         print("Doing stuff...")
+    #         if hasattr(do_something, 'count'):
+    #             do_something.count = 1
+    #         # do your stuff
+    #         plot_icp_result(extend_1s(a), b, tsf, states=states[:do_something.count], init_tsf=init_tsf, **kwargs)
+    #         do_something.count += 1
+    #
+    #         sch.enter(60, 1, do_something, (sc,))
+    #
+    #     sch.enter(60, 1, do_something, (sch,))
+    #     ic('med')
+    #     sch.run()
+    #     ic()
+    # else:
+    plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, animate=True, **kwargs)
 
 
 class PoseEstimator:
@@ -298,7 +324,7 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], save=True)
+        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], animate=True, save=False)
 
     check_icp_hsr()
 
@@ -327,7 +353,7 @@ if __name__ == '__main__':
         ga()
         db()
 
-    clustering_sanity_check()
+    # clustering_sanity_check()
 
     def icp_after_cluster():
         lbs = c(pts, approach='hierarchical', distance_threshold=1)   # A good clustering result by empirical inspection

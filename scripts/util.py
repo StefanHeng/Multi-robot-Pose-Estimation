@@ -165,22 +165,13 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
     return np.apply_along_axis(lambda i: intersec(*i), 1, np.vstack([x, y]).T)
 
 
-def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, xlim=None, ylim=None,
-                    init_tsf=np.identity(3)):
+def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None,
+                    init_tsf=np.identity(3), animate=False):
     """
     Assumes 2d data
     """
-    ori_tsl = tsf[:2, 2]
-    angle = acos(tsf[0][0])
-    ic(tsf, ori_tsl, angle)
-    unit_sqr = np.array([
-        [0, 0],
-        [0, 1],
-        [1, 1],
-        [1, 0],
-        [0, 0]
-    ])
-    unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf.T)[:, :2]
+    if animate:
+        plt.ion()
 
     def _plot_point_cloud(arr, label, **kwargs):
         kwargs_ = dict(
@@ -201,41 +192,73 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, lst_match=None, xlim=
         )
         plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **(kwargs_ | kwargs))
 
-    def _plot_matched_points(src__, tgt__, **kwargs):
+    def _plot_matched_points(stt, **kwargs):
+        src__, tgt__ = stt[0], stt[1]
         for s_, t_ in zip(src__, tgt__):
             _plot_line_seg(s_, t_, **kwargs)
 
-    x_rang, y_rang = (abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])) if xlim and ylim else (np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1]))
+    def _step(tsf_, states_):
+        plt.cla()
+        if xlim:
+            plt.xlim(xlim)
+        if ylim:
+            plt.ylim(ylim)
+
+        ori_tsl = tsf_[:2, 2]
+        angle = acos(tsf_[0][0])
+        ic(tsf_, ori_tsl, angle)
+        unit_sqr = np.array([
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 0],
+            [0, 0]
+        ])
+        unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf_.T)[:, :2]
+        plt.plot(0, 0, marker='o', c='orange', ms=4)
+        _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
+        _plot_point_cloud(unit_sqr_tsf, 'unit square, ICP output', alpha=0.8, ms=0.5, marker=None)
+        for i in zip(unit_sqr, unit_sqr_tsf):
+            _plot_line_seg(*i, alpha=0.3, marker=None)
+        if states_:
+            _plot_matched_points(states_[0], c='g', ms=1, ls='solid', alpha=0.5)
+            _plot_matched_points(states_[-1], c='g', ms=1, ls='solid')
+
+        _plot_point_cloud(src, 'source', c='c', alpha=0.5)
+        if not np.array_equal(init_tsf, np.identity(3)):
+            _plot_point_cloud(src @ init_tsf.T, 'source, initial guess', c='c', alpha=0.5)
+        _plot_point_cloud(tgt, 'target', c='m')
+        _plot_point_cloud(src @ tsf_.T, 'source, transformed', c='c')
+
+        handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys())
+        plt.pause(1)
+
+    x_rang, y_rang = (
+        abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])
+    ) if xlim and ylim else (
+        np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1])
+    )
     ratio = 1 / x_rang * y_rang
+    ic(xlim, ylim, ratio)
     plt.figure(figsize=(12, 12 * ratio), constrained_layout=True)
-    plt.plot(0, 0, marker='o', c='orange', ms=4)
-    _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
-    _plot_point_cloud(unit_sqr_tsf, 'unit square, ICP output', alpha=0.8, ms=0.5, marker=None)
-    for i in zip(unit_sqr, unit_sqr_tsf):
-        _plot_line_seg(*i, alpha=0.3, marker=None)
-    if lst_match:
-        _plot_matched_points(*lst_match[0], c='g', ms=1, ls='solid', alpha=0.5)
-        _plot_matched_points(*lst_match[-1], c='g', ms=1, ls='solid')
-
-    _plot_point_cloud(src, 'source', c='c', alpha=0.5)
-    if not np.array_equal(init_tsf, np.identity(3)):
-        _plot_point_cloud(src @ init_tsf.T, 'source, initial guess', c='c', alpha=0.5)
-    _plot_point_cloud(tgt, 'target', c='m')
-    _plot_point_cloud(src @ tsf.T, 'source, transformed', c='c')
-
-    if xlim:
-        plt.xlim(xlim)
-    if ylim:
-        plt.ylim(ylim)
-
+    # exit(1)
     t = 'ICP results'
     if title:
         t = f'{t}, {title}'
-    plt.title(t)
-    plt.legend()
+    plt.suptitle(t)
     plt.gca().set_aspect('equal')
+    if animate:
+        for idx, (src_match, tgt_match, tsf) in enumerate(states):
+            _step(tsf, states[:idx])
+    else:
+        _step(tsf, states)
+
     if save:
         plt.savefig(f'plot/{t}.png', dpi=300)
+
+    plt.ioff()  # So that window doesn't close
     plt.show()
 
 
