@@ -126,16 +126,8 @@ class Icp:
         src = self.src  # TODO: implementation wrong with a different initial guess?
         states = []
 
-        # ic(src[:10])
-        # src = self.src @ tsf.T
-        # ic(src[:10])
-
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
-            # ic(idxs[:10])
-            # if lst_match is not None:
-            #     lst_match.append((src_match, tgt_match))
-            # ic(tsf)
             tsf = tsf @ self.svd(src_match, tgt_match)
             src = self.src @ tsf.T
 
@@ -195,8 +187,8 @@ class Icp:
         :return: T: transformation matrix
         """
 
-        def _centroid(pts):
-            return np.sum(pts, axis=0) / pts.shape[0]
+        def _centroid(pts_):
+            return np.sum(pts_, axis=0) / pts_.shape[0]
 
         c_src = _centroid(src)
         c_tgt = _centroid(tgt)
@@ -212,31 +204,11 @@ class Icp:
         return tsf
 
 
-def visualize(a, b, tsf=np.identity(3), animate=False, **kwargs):
+def visualize(a, b, tsf=np.identity(3), mode='static', **kwargs):
     init_tsf = tsf
     tsf, states = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, verbose=True)
-
-    # if animate:
-    #     sch = sched.scheduler(time.time, time.sleep)
-    #     ic(time.time, time.sleep)
-    #     ic('here')
-    #
-    #     def do_something(sc):
-    #         print("Doing stuff...")
-    #         if hasattr(do_something, 'count'):
-    #             do_something.count = 1
-    #         # do your stuff
-    #         plot_icp_result(extend_1s(a), b, tsf, states=states[:do_something.count], init_tsf=init_tsf, **kwargs)
-    #         do_something.count += 1
-    #
-    #         sch.enter(60, 1, do_something, (sc,))
-    #
-    #     sch.enter(60, 1, do_something, (sch,))
-    #     ic('med')
-    #     sch.run()
-    #     ic()
-    # else:
-    plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, animate=True, **kwargs)
+    # states = states[:3]
+    plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, mode=mode, **kwargs)
 
 
 class PoseEstimator:
@@ -324,7 +296,7 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], animate=True, save=False)
+        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='control', scale=1.5)
 
     check_icp_hsr()
 
@@ -365,7 +337,7 @@ if __name__ == '__main__':
         tsf = np.identity(3)
         tsf[:2, -1] = cls.mean(axis=0)
         ic('init', tsf)
-        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 12], ylim=[-2, 12], save=True)
+        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 12], ylim=[-2, 12], mode='control')
 
     # icp_after_cluster()
 

@@ -6,6 +6,7 @@ from functools import reduce
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse
 import matplotlib.transforms as transforms
+from matplotlib.widgets import Button
 import seaborn as sns
 from icecream import ic
 
@@ -21,6 +22,13 @@ def json_load(fnm):
 
 def get(dic, keys):
     return reduce(lambda acc, elm: acc[elm], keys, dic)
+
+
+def clipper(low, high):
+    """
+    :return: A clipping function for range [low, high]
+    """
+    return lambda x: max(min(x, high), low)
 
 
 class JsonWriter:
@@ -116,7 +124,6 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
     theta = np.linspace(0, 2 * pi, num=n+1)[:-1]
     x, y = polar2planar(r, theta)
     boundaries = (-w/2, -h/2, w/2, h/2)
-    # ic(arr_x, arr_y)
 
     def intersec_rect(left, bot, right, top):
         """ :return: function that returns the intersection of point relative to a rectangle """
@@ -151,14 +158,10 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
     if visualize:
         fig, ax = plt.subplots(figsize=(16, 9), constrained_layout=True)
         for x_i, y_i in zip(x, y):
-            # x, y = np.random.randint(1, high=4, size=2)
             x_int, y_int = intersec_rect(*boundaries)(x_i, y_i)
-            # ic(x, y)
-            # ic(x_int, y_int)
             ax.add_patch(Rectangle((-w/2, -h/2), w, h, edgecolor='b', fill=False))
             ax.plot((0, x_int), (0, y_int), marker='o', c='c', ms=2, lw=0.5, ls='dotted')
             ax.plot((x_i, x_int), (y_i, y_int), marker='o', c='orange', ms=2, ls='dotted')
-            # ax.plot(x_int, y_int, marker='o', c='orange', ms=4)
         plt.gca().set_aspect('equal')
         plt.show()
     intersec = intersec_rect(*boundaries)
@@ -166,13 +169,22 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
 
 
 def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None,
-                    init_tsf=np.identity(3), animate=False):
+                    init_tsf=np.identity(3), mode='static', scale=1):
     """
-    Assumes 2d data
-    """
-    if animate:
-        plt.ion()
+    :param src: Source coordinates
+    :param tgt: Target coordinates
+    :param tsf: ICP result transformation
+    :param title: Plot title
+    :param save: If true, plot saved as image
+    :param states: A list of source-target matched points & transformation for each iteration
+    :param xlim: X limit for plot, inferred if not given
+    :param ylim: Y limit for plot, inferred if not given
+    :param init_tsf: Initial transformation guess for ICP
+    :param mode: Plotting mode, one of [`static`, `animate`, `control`]
+    :param scale: Plot window scale
 
+    .. note:: Assumes 2d data
+    """
     def _plot_point_cloud(arr, label, **kwargs):
         kwargs_ = dict(
             c='orange',
@@ -197,12 +209,15 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         for s_, t_ in zip(src__, tgt__):
             _plot_line_seg(s_, t_, **kwargs)
 
-    def _step(tsf_, states_):
+    def _step(idx_):
+        tsf_ = states[idx_][-1]
         plt.cla()
         if xlim:
             plt.xlim(xlim)
         if ylim:
             plt.ylim(ylim)
+        if mode == 'control':
+            plt.suptitle(f'{t}, iteration {idx_}')
 
         ori_tsl = tsf_[:2, 2]
         angle = acos(tsf_[0][0])
@@ -220,9 +235,9 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         _plot_point_cloud(unit_sqr_tsf, 'unit square, ICP output', alpha=0.8, ms=0.5, marker=None)
         for i in zip(unit_sqr, unit_sqr_tsf):
             _plot_line_seg(*i, alpha=0.3, marker=None)
-        if states_:
-            _plot_matched_points(states_[0], c='g', ms=1, ls='solid', alpha=0.5)
-            _plot_matched_points(states_[-1], c='g', ms=1, ls='solid')
+        if states and idx_ != 0:
+            _plot_matched_points(states[0], c='g', ms=1, ls='solid', alpha=0.5)
+            _plot_matched_points(states[idx_], c='g', ms=1, ls='solid')
 
         _plot_point_cloud(src, 'source', c='c', alpha=0.5)
         if not np.array_equal(init_tsf, np.identity(3)):
@@ -235,25 +250,53 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         plt.legend(by_label.values(), by_label.keys())
         plt.pause(1)
 
+    N_STT = len(states)
+
+    class PlotFrame:
+        def __init__(self):
+            self.idx = 0
+            self.clp = clipper(0, N_STT-1)
+            ic(self.clp)
+
+        def next(self, event):
+            ic(self.idx+1)
+            ic(self.idx, self.clp)
+            self.idx = self.clp(self.idx+1)
+            _step(self.idx)
+
+        def prev(self, event):
+            self.idx = self.clp(self.idx-1)
+            _step(self.idx)
+
     x_rang, y_rang = (
         abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])
     ) if xlim and ylim else (
         np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1])
     )
     ratio = 1 / x_rang * y_rang
-    ic(xlim, ylim, ratio)
-    plt.figure(figsize=(12, 12 * ratio), constrained_layout=True)
-    # exit(1)
+    d = 12 * scale
+    plt.figure(figsize=(d, d * ratio), constrained_layout=True)
     t = 'ICP results'
     if title:
         t = f'{t}, {title}'
     plt.suptitle(t)
     plt.gca().set_aspect('equal')
-    if animate:
-        for idx, (src_match, tgt_match, tsf) in enumerate(states):
-            _step(tsf, states[:idx])
+    if mode == 'animate':
+        plt.ion()
+        for idx in range(N_STT):
+            _step(idx)
+    elif mode =='control':
+        pf = PlotFrame()
+        ax = plt.gca()
+        axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
+        axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
+        bnext = Button(axnext, 'Next')
+        bnext.on_clicked(pf.next)
+        bprev = Button(axprev, 'Previous')
+        bprev.on_clicked(pf.prev)
+        plt.sca(ax)
     else:
-        _step(tsf, states)
+        _step(N_STT-1)
 
     if save:
         plt.savefig(f'plot/{t}.png', dpi=300)
