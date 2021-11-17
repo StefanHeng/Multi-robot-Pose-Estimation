@@ -123,16 +123,17 @@ class Icp:
         err = float('inf')
         d_err = float('inf')
         n = 0
-        src = self.src  # TODO: implementation wrong with a different initial guess?
+        # src = self.src  # TODO: implementation wrong with a non-identity initial guess?
+        src = self.src @ tsf.T
         states = []
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
-            tsf = tsf @ self.svd(src_match, tgt_match)
-            src = self.src @ tsf.T
-
             if verbose:
                 states.append((src_match, tgt_match, tsf))
+
+            tsf = tsf @ self.svd(src_match, tgt_match)
+            src = self.src @ tsf.T
 
             def _err():
                 src_ = src[idxs[:, 0]]
@@ -207,6 +208,7 @@ class Icp:
 def visualize(a, b, tsf=np.identity(3), mode='static', **kwargs):
     init_tsf = tsf
     tsf, states = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, verbose=True)
+    ic(states[:2])
     # states = states[:3]
     plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, mode=mode, **kwargs)
 
@@ -296,9 +298,9 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='control', scale=1.5)
+        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
 
-    check_icp_hsr()
+    # check_icp_hsr()
 
     c = Cluster.cluster
 
@@ -337,9 +339,9 @@ if __name__ == '__main__':
         tsf = np.identity(3)
         tsf[:2, -1] = cls.mean(axis=0)
         ic('init', tsf)
-        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 12], ylim=[-2, 12], mode='control')
+        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 6], ylim=[-2, 3], mode='static', save=True)
 
-    # icp_after_cluster()
+    icp_after_cluster()
 
 
 

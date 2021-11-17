@@ -80,6 +80,7 @@ if __name__ == '__main__':
     # plt.plot([1, 2], [3, 4])
     # plt.show()
 
+    # Taken from https://matplotlib.org/stable/gallery/widgets/buttons.html
     import numpy as np
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Button

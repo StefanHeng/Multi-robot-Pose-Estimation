@@ -1,6 +1,6 @@
 import numpy as np
 import json
-from math import pi, acos
+from math import pi, acos, degrees
 from functools import reduce
 
 import matplotlib.pyplot as plt
@@ -185,14 +185,14 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
 
     .. note:: Assumes 2d data
     """
-    def _plot_point_cloud(arr, label, **kwargs):
+    def _plot_point_cloud(arr, **kwargs):
         kwargs_ = dict(
             c='orange',
             marker='.',
             ms=1,
             lw=0.5,
         )
-        plt.plot(arr[:, 0], arr[:, 1], label=label, **(kwargs_ | kwargs))
+        plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
 
     def _plot_line_seg(c1, c2, **kwargs):
         kwargs_ = dict(
@@ -209,64 +209,7 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         for s_, t_ in zip(src__, tgt__):
             _plot_line_seg(s_, t_, **kwargs)
 
-    def _step(idx_):
-        tsf_ = states[idx_][-1]
-        plt.cla()
-        if xlim:
-            plt.xlim(xlim)
-        if ylim:
-            plt.ylim(ylim)
-        if mode == 'control':
-            plt.suptitle(f'{t}, iteration {idx_}')
-
-        ori_tsl = tsf_[:2, 2]
-        angle = acos(tsf_[0][0])
-        ic(tsf_, ori_tsl, angle)
-        unit_sqr = np.array([
-            [0, 0],
-            [0, 1],
-            [1, 1],
-            [1, 0],
-            [0, 0]
-        ])
-        unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf_.T)[:, :2]
-        plt.plot(0, 0, marker='o', c='orange', ms=4)
-        _plot_point_cloud(unit_sqr, 'unit square', alpha=0.5, ms=0, marker=None)
-        _plot_point_cloud(unit_sqr_tsf, 'unit square, ICP output', alpha=0.8, ms=0.5, marker=None)
-        for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, alpha=0.3, marker=None)
-        if states and idx_ != 0:
-            _plot_matched_points(states[0], c='g', ms=1, ls='solid', alpha=0.5)
-            _plot_matched_points(states[idx_], c='g', ms=1, ls='solid')
-
-        _plot_point_cloud(src, 'source', c='c', alpha=0.5)
-        if not np.array_equal(init_tsf, np.identity(3)):
-            _plot_point_cloud(src @ init_tsf.T, 'source, initial guess', c='c', alpha=0.5)
-        _plot_point_cloud(tgt, 'target', c='m')
-        _plot_point_cloud(src @ tsf_.T, 'source, transformed', c='c')
-
-        handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
-        by_label = dict(zip(labels, handles))
-        plt.legend(by_label.values(), by_label.keys())
-        plt.pause(1)
-
     N_STT = len(states)
-
-    class PlotFrame:
-        def __init__(self):
-            self.idx = 0
-            self.clp = clipper(0, N_STT-1)
-            ic(self.clp)
-
-        def next(self, event):
-            ic(self.idx+1)
-            ic(self.idx, self.clp)
-            self.idx = self.clp(self.idx+1)
-            _step(self.idx)
-
-        def prev(self, event):
-            self.idx = self.clp(self.idx-1)
-            _step(self.idx)
 
     x_rang, y_rang = (
         abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])
@@ -281,25 +224,87 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         t = f'{t}, {title}'
     plt.suptitle(t)
     plt.gca().set_aspect('equal')
+
+    def _step(idx_, t_):
+        tsf_ = states[idx_][-1] if states else tsf
+        plt.cla()
+        if xlim:
+            plt.xlim(xlim)
+        if ylim:
+            plt.ylim(ylim)
+        if mode == 'control':
+            t_ = f'{t_}, iteration {idx_}'
+            plt.suptitle(t_)
+
+        ori_tsl = tsf_[:2, 2]
+        angle = degrees(acos(tsf_[0][0]))
+        ic(tsf_, ori_tsl, angle)
+        unit_sqr = np.array([
+            [0, 0],
+            [0, 1],
+            [1, 1],
+            [1, 0],
+            [0, 0]
+        ])
+        unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf_.T)[:, :2]
+        plt.plot(0, 0, marker='o', c='orange', ms=4)
+        _plot_point_cloud(unit_sqr, label='Unit square', alpha=0.5, ms=0, marker=None)
+        _plot_point_cloud(unit_sqr_tsf, label='Unit square, transformed', alpha=0.8, ms=0.5, marker=None)
+        for i in zip(unit_sqr, unit_sqr_tsf):
+            _plot_line_seg(*i, alpha=0.3, marker=None)
+        if states:
+            _plot_matched_points(states[0], c='g', ms=1, ls='solid', alpha=0.5, label='Matched points, initial')
+            _plot_matched_points(states[idx_], c='g', ms=1, ls='solid', label='Matched points, final ')
+
+        _plot_point_cloud(src, label='Source points', c='c', alpha=0.5)
+        if not np.array_equal(init_tsf, np.identity(3)):
+            _plot_point_cloud(src @ init_tsf.T, label='Source points, initial guess', c='c', alpha=0.5)
+        _plot_point_cloud(tgt, label='Target points', c='m')
+        _plot_point_cloud(src @ tsf_.T, label='Source points, transformed', c='c')
+
+        handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
+        by_label = dict(zip(labels, handles))
+        plt.legend(by_label.values(), by_label.keys())
+
+        if save:
+            plt.savefig(f'plot/{t_}.png', dpi=300)
+
+        if mode != 'static':
+            plt.pause(1 if mode == 'animate' else 0.1)  # 'control'
+
     if mode == 'animate':
         plt.ion()
         for idx in range(N_STT):
-            _step(idx)
-    elif mode =='control':
-        pf = PlotFrame()
-        ax = plt.gca()
-        axprev = plt.axes([0.7, 0.05, 0.1, 0.075])
-        axnext = plt.axes([0.81, 0.05, 0.1, 0.075])
-        bnext = Button(axnext, 'Next')
-        bnext.on_clicked(pf.next)
-        bprev = Button(axprev, 'Previous')
-        bprev.on_clicked(pf.prev)
-        plt.sca(ax)
-    else:
-        _step(N_STT-1)
+            _step(idx, t)
+    elif mode == 'control':
+        class PlotFrame:
+            def __init__(self, i=0):
+                self.idx = i
+                self.clp = clipper(0, N_STT-1)
 
-    if save:
-        plt.savefig(f'plot/{t}.png', dpi=300)
+            def next(self, event):
+                prev_idx = self.idx
+                self.idx = self.clp(self.idx+1)
+                if prev_idx != self.idx:
+                    _step(self.idx, t)
+
+            def prev(self, event):
+                prev_idx = self.idx
+                self.idx = self.clp(self.idx-1)
+                if prev_idx != self.idx:
+                    _step(self.idx, t)
+        init = 0
+        pf = PlotFrame(i=init)
+        ax = plt.gca()
+        btn_next = Button(plt.axes([0.81, 0.05, 0.1, 0.075]), 'Next')
+        btn_next.on_clicked(pf.next)
+        btn_prev = Button(plt.axes([0.7, 0.05, 0.1, 0.075]), 'Previous')
+        btn_prev.on_clicked(pf.prev)
+        plt.sca(ax)
+
+        _step(init, t)
+    else:
+        _step(N_STT-1, t)
 
     plt.ioff()  # So that window doesn't close
     plt.show()
