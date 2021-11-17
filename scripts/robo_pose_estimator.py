@@ -337,18 +337,18 @@ if __name__ == '__main__':
 
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
 
-        visualize(
-            ptc_kuka, cls,
-            title='HSR locates KUKA, from the real cluster',
-            init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
-            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
-        )
         # visualize(
         #     ptc_kuka, cls,
-        #     title='HSR locates KUKA, from the real cluster, good translation estimate',
-        #     init_tsf=,
+        #     title='HSR locates KUKA, from the real cluster',
+        #     init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
         #     xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
         # )
+        visualize(
+            ptc_kuka, cls,
+            title='HSR locates KUKA, from the real cluster, good translation estimate',
+            init_tsf=tsl_n_angle2tsf(tsl=[2.5, -0.5]),
+            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
+        )
 
     icp_after_cluster()
 

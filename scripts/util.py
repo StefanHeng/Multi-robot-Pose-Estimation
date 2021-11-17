@@ -1,7 +1,7 @@
 import glob
 import json
 import os.path
-from math import pi, acos, degrees
+from math import pi, acos, degrees, sqrt
 from functools import reduce
 
 import numpy as np
@@ -34,7 +34,7 @@ def json_load(fnm):
 
 def get(dic, ks):
     # return reduce(lambda acc, elm: acc[elm], keys, dic)
-    return reduce(lambda acc, elm: acc[elm], ks.split('.'), dic)
+    return reduce(lambda acc, elm: acc[elm] if elm in acc else None, ks.split('.'), dic)
 
 
 def config(attr):
@@ -70,6 +70,14 @@ def clipper(low, high):
     :return: A clipping function for range [low, high]
     """
     return lambda x: max(min(x, high), low)
+
+
+def get_3rd_side(a, b):
+    """
+    Returns hypotenuse of a right-angled triangle, given it's other sides
+    """
+    # return np.sqrt(np.sum(np.square(mags)))
+    return sqrt(a**2 + b**2)
 
 
 class JsonWriter:
@@ -235,7 +243,13 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
     return np.apply_along_axis(lambda i: intersec(*i), 1, np.vstack([x, y]).T)
 
 
-def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None,
+def save_fig(save, title):
+    if save:
+        fnm = f'{title}.png'
+        plt.savefig(os.path.join(PATH_BASE, DIR_PROJ, 'plot', fnm), dpi=300)
+
+
+def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
                     init_tsf=np.identity(3), mode='static', scale=1):
     """
     :param src: Source coordinates
@@ -265,9 +279,26 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         coords = np.array([c1, c2])
         mean = coords.mean(axis=0)
         mags = (coords[1] - coords[0]) * r
-        plt.arrow(*(mean-mags/2), *mags, head_width=0.05, length_includes_head=True, lw=0, overhang=0.2, **kwargs)
 
-    def _plot_line_seg(c1, c2, with_arrow=False, **kwargs):
+        width = 5 * get_3rd_side(*mags)
+        if not hasattr(plot_icp_result, 'clp'):
+            plot_icp_result.clp = clipper(0.01, 0.05)
+        width = plot_icp_result.clp(width)
+
+        kwargs_ = dict(
+            alpha=0.5,
+            # head_width=0.05,
+            head_width=width,
+            length_includes_head=True,
+            lw=0,
+            overhang=0.2,
+        )
+        plt.arrow(
+            *(mean-mags/2), *mags,
+            **(kwargs_ | kwargs)
+        )
+
+    def _plot_line_seg(c1, c2, **kwargs):
         kwargs_ = dict(
             marker='o',
             c='orange',
@@ -278,7 +309,7 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         kwargs = kwargs_ | kwargs
         plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **kwargs)
         if with_arrow:
-            _plot_line_seg_arrow(c1, c2, color=kwargs['c'], alpha=kwargs['alpha'])
+            _plot_line_seg_arrow(c1, c2, color=get(kwargs, 'c'), alpha=get(kwargs, 'alpha'))
 
     def _plot_matched_points(stt, **kwargs):
         src__, tgt__ = stt[0], stt[1]
@@ -344,14 +375,15 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
         _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
         for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, with_arrow=True, marker=None, c=c, alpha=0.5)
+            _plot_line_seg(*i, marker=None, c=c, alpha=0.5)
 
         handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
         by_label = dict(zip(labels, handles))
         plt.legend(by_label.values(), by_label.keys())
 
-        if save:
-            plt.savefig(f'plot/{t_}.png', dpi=300)
+        # if save:
+        #     plt.savefig(f'plot/{t_}.png', dpi=300)
+        save_fig(save, title)
 
         if mode != 'static':
             plt.pause(1 if mode == 'animate' else 0.1)  # 'control'
@@ -444,8 +476,9 @@ def plot_cluster(data, labels, title=None, save=False):
     plt.title(t)
     plt.legend()
     plt.gca().set_aspect('equal')
-    if save:
-        plt.savefig(f'plot/{t}.png', dpi=300)
+    # if save:
+    #     plt.savefig(f'plot/{t}.png', dpi=300)
+    save_fig(save, title)
     plt.show()
 
 
