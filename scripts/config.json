@@ -1,0 +1,15 @@
+{
+    "data": {
+        "eg": {
+            "HSR": {
+                "fmt": "*.json"
+            }
+        }
+    },
+    "dimensions": {
+        "KUKA": {
+            "length": 1.0922,
+            "width": 0.6095999999999999
+        }
+    }
+}

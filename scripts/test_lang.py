@@ -122,12 +122,20 @@ if __name__ == '__main__':
     #
     # plt.show()
 
-    import numpy as np
+    # import numpy as np
+    #
+    # def rot_mat(theta):
+    #     c, s = np.cos(theta), np.sin(theta)
+    #     return np.array([
+    #         [c, -s],
+    #         [s, c]
+    #     ])
+    # ic(rot_mat(0))
 
-    def rot_mat(theta):
-        c, s = np.cos(theta), np.sin(theta)
-        return np.array([
-            [c, -s],
-            [s, c]
-        ])
-    ic(rot_mat(0))
+    import pint
+    reg = pint.UnitRegistry()
+    sz_m = 1.74 * reg.meter
+    ic(sz_m, type(sz_m))  # 1.74 meter
+    sz_in = sz_m.to(reg.inch)
+    ic(sz_in, type(sz_in))
+    ic(vars(sz_in), sz_in.magnitude)

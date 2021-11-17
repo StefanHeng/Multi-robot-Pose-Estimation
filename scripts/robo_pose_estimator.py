@@ -226,9 +226,6 @@ class PoseEstimator:
     def __init__(self):
         pass
 
-    L_KUKA = 2
-    W_KUKA = 0.8
-
     class FusePose:
         """
         1) For each robot `r`, get its multiple pose estimates of the other robot `r_`
@@ -237,15 +234,15 @@ class PoseEstimator:
         2) Pick the pair that makes sense as relative pose
         Note that those should be inverse of each other
         """
-        def __init__(self, pc_a=None, pc_b=None, rg_a=None, rg_b=None):
+        def __init__(self, ptc_a=None, ptc_b=None, rg_a=None, rg_b=None):
             """
-            :param pc_a: Point-cloud representation of `robot_a`
-            :param pc_b: Point-cloud representation of `robot_b`
+            :param ptc_a: Point-cloud representation of `robot_a`
+            :param ptc_b: Point-cloud representation of `robot_b`
             :param rg_a: Range of laser sensor of `robot_a`
             :param rg_b: Range of laser sensor of `robot_b`
             """
-            self.pc_a = pc_a
-            self.pc_b = pc_b
+            self.ptc_a = ptc_a
+            self.ptc_b = ptc_b
             self.rg_a = rg_a
             self.rg_b = rg_b
 
@@ -255,7 +252,7 @@ class PoseEstimator:
 
             # visualize(pts_a, self.pc_b, 'default init from HSR')
             # visualize(self.pc_b, pts_a, 'default init from KUKA shape')
-            visualize(self.pc_b, pts_a, tsf=np.array([
+            visualize(self.ptc_b, pts_a, tsf=np.array([
                 [1, 0, 3],
                 [0, 1, -0.5],
                 [0, 0, 1]
@@ -284,18 +281,20 @@ if __name__ == '__main__':
 
     # icp_sanity_check()
 
-    pc_kuka = get_rect_pointcloud(
-        PoseEstimator.L_KUKA,
-        PoseEstimator.W_KUKA,
-    )
-    hsr_scans = json_load('../data/HSR laser 2.json')
-    s = hsr_scans[77]
-    pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+    # ptc_kuka = get_rect_pointcloud(
+    #     PoseEstimator.L_KUKA,
+    #     PoseEstimator.W_KUKA,
+    # )
+    ptc_kuka = get_kuka_pointcloud()
+    # hsr_scans = json_load('../data/HSR laser 2.json')
+    # s = hsr_scans[77]
+    # pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+    pts = eg_hsr_scan()
 
     def check_icp_hsr():
         # Empirically have `robot_a` as HSR, `robot_b` as KUKA
-        fp = PoseEstimator.FusePose(pc_b=pc_kuka)
-        ic(fp.pc_b.shape)
+        fp = PoseEstimator.FusePose(ptc_b=ptc_kuka)
+        ic(fp.ptc_b.shape)
 
         title = 'default init from KUKA shape, good translation guess'
         init_tsf = np.array([
@@ -303,7 +302,7 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(pc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
+        visualize(ptc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
 
     # check_icp_hsr()
 
@@ -341,13 +340,13 @@ if __name__ == '__main__':
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
 
         visualize(
-            pc_kuka, cls,
+            ptc_kuka, cls,
             title='HSR locates KUKA, from the real cluster',
             init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
             xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
         )
         visualize(
-            pc_kuka, cls,
+            ptc_kuka, cls,
             title='HSR locates KUKA, from the real cluster, with perfect',
             init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
             xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False

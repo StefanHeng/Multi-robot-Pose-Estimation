@@ -1,16 +1,28 @@
-import numpy as np
+import glob
 import json
+import os.path
 from math import pi, acos, degrees
 from functools import reduce
 
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse
 import matplotlib.transforms as transforms
 from matplotlib.widgets import Button
 import seaborn as sns
+import pint
 from icecream import ic
 
+from data_path import *
+
 sns.set_style('darkgrid')
+
+
+reg = pint.UnitRegistry()
+
+
+def unit_converter(m, src=reg.inch, dst=reg.meter):
+    return (m * src).to(dst).magnitude
 
 
 def json_load(fnm):
@@ -20,8 +32,38 @@ def json_load(fnm):
     return scans
 
 
-def get(dic, keys):
-    return reduce(lambda acc, elm: acc[elm], keys, dic)
+def get(dic, ks):
+    # return reduce(lambda acc, elm: acc[elm], keys, dic)
+    return reduce(lambda acc, elm: acc[elm], ks.split('.'), dic)
+
+
+def config(attr):
+    """
+    Retrieves the queried attribute value from the config file.
+
+    Loads the config file on first call.
+    """
+    if not hasattr(config, 'config'):
+        with open(f'{PATH_BASE}/{DIR_PROJ}/config.json') as f:
+            config.config = json.load(f)
+            ic(config.config)
+    return get(config.config, attr)
+
+
+def eg_hsr_scan(k1=0, k2=77):
+    """
+    :return: Example HSR laser scan as 2D coordinates, given file name and measurement number
+    """
+    path = os.path.join(PATH_BASE, DIR_DATA)
+    fls = sorted(glob.iglob(f'{path}/{config(f"{DIR_DATA}.eg.HSR.fmt")}', recursive=True))
+    hsr_scans = json_load(fls[k1])
+    s = hsr_scans[k2]
+    return laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
+
+
+def get_kuka_pointcloud():
+    d_dim = config('dimensions.KUKA')
+    return get_rect_pointcloud(d_dim['length'], d_dim['width'])
 
 
 def clipper(low, high):
@@ -245,6 +287,8 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
     ratio = 1 / x_rang * y_rang
     d = 12 * scale
     plt.figure(figsize=(d, d * ratio), constrained_layout=True)
+    plt.xlabel('Target space dim 1 (m)')
+    plt.ylabel('Target space dim 2 (m)')
     t = 'ICP results'
     if title:
         t = f'{t}, {title}'
@@ -277,10 +321,10 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
 
         cs = iter(sns.color_palette(palette='husl', n_colors=4))
         c = next(cs)
-        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.5, label='Unit square')
-        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.8, label='Unit square, transformed')
+        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
+        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
         for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, marker=None, c=c, alpha=0.3)
+            _plot_line_seg(*i, marker=None, c=c, alpha=0.5)
 
         c = next(cs)
         if states:
@@ -413,7 +457,10 @@ if __name__ == '__main__':
     # _check()
 
     def _kuka_pointcloud():
-        pc = get_rect_pointcloud(2, 0.8, visualize=False)
+        # pc = get_rect_pointcloud(2, 0.8, visualize=False)
+        ptc = get_kuka_pointcloud()
         plt.figure(figsize=(16, 9), constrained_layout=True)
-        plt.plot(pc[:, 0], pc[:, 1], marker='o', ms=1, lw=0.5)
+        plt.plot(ptc[:, 0], ptc[:, 1], marker='o', ms=1, lw=0.5)
         plt.show()
+
+    ic(config('dimensions.KUKA.length'))

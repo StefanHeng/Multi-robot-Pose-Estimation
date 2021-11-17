@@ -85,6 +85,7 @@ def plot_laser(ranges, a_max, a_min, title=None, save=False, polar=False):
     if title:
         t = f'{t}, {title}'
     plt.title(t)
+    plt.gca().set_aspect('equal')
     if save:
         plt.savefig(f'{t}.png', dpi=300)
     plt.show()
