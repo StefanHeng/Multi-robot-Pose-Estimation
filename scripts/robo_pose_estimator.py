@@ -7,7 +7,7 @@ from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 from icecream import ic
 
-from util import *
+from scripts.util import *
 
 
 class Cluster:
@@ -213,8 +213,6 @@ class Icp:
 def visualize(a, b, init_tsf=np.identity(3), mode='static', **kwargs):
     ic('Initial guess', init_tsf)
     tsf, states = Icp(a, b)(tsf=init_tsf, max_iter=100, min_d_err=1e-6, verbose=True)
-    # ic(states[:2])
-    # states = states[:3]
     plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, mode=mode, **kwargs)
 
 
@@ -345,12 +343,12 @@ if __name__ == '__main__':
             init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
             xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
         )
-        visualize(
-            ptc_kuka, cls,
-            title='HSR locates KUKA, from the real cluster, with perfect',
-            init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
-            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
-        )
+        # visualize(
+        #     ptc_kuka, cls,
+        #     title='HSR locates KUKA, from the real cluster, good translation estimate',
+        #     init_tsf=,
+        #     xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
+        # )
 
     icp_after_cluster()
 

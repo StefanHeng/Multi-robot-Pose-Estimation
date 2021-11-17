@@ -93,7 +93,7 @@ def plot_laser(ranges, a_max, a_min, title=None, save=False, polar=False):
 
 if __name__ == '__main__':
     import os
-    os.chdir('../data')
+    os.chdir('../../data')
 
     fnms = sys_out('ls').split('\n')
     s = json_load(fnms[0])[0]

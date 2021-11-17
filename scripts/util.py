@@ -13,7 +13,7 @@ import seaborn as sns
 import pint
 from icecream import ic
 
-from data_path import *
+from scripts.data_path import *
 
 sns.set_style('darkgrid')
 
@@ -46,7 +46,6 @@ def config(attr):
     if not hasattr(config, 'config'):
         with open(f'{PATH_BASE}/{DIR_PROJ}/config.json') as f:
             config.config = json.load(f)
-            ic(config.config)
     return get(config.config, attr)
 
 
@@ -262,7 +261,13 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         )
         plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
 
-    def _plot_line_seg(c1, c2, **kwargs):
+    def _plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
+        coords = np.array([c1, c2])
+        mean = coords.mean(axis=0)
+        mags = (coords[1] - coords[0]) * r
+        plt.arrow(*(mean-mags/2), *mags, head_width=0.05, length_includes_head=True, lw=0, overhang=0.2, **kwargs)
+
+    def _plot_line_seg(c1, c2, with_arrow=False, **kwargs):
         kwargs_ = dict(
             marker='o',
             c='orange',
@@ -270,7 +275,10 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
             lw=1,
             ls='dotted'
         )
-        plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **(kwargs_ | kwargs))
+        kwargs = kwargs_ | kwargs
+        plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **kwargs)
+        if with_arrow:
+            _plot_line_seg_arrow(c1, c2, color=kwargs['c'], alpha=kwargs['alpha'])
 
     def _plot_matched_points(stt, **kwargs):
         src__, tgt__ = stt[0], stt[1]
@@ -317,14 +325,14 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
             [0, 0]
         ])
         unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf_.T)[:, :2]
-        plt.plot(0, 0, marker='o', c='orange', ms=4)
 
-        cs = iter(sns.color_palette(palette='husl', n_colors=4))
+        cs = iter(sns.color_palette(palette='husl', n_colors=5))
         c = next(cs)
-        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
-        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
-        for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, marker=None, c=c, alpha=0.5)
+        _plot_point_cloud(src, c=c, alpha=0.5, label='Source points')
+        if not np.array_equal(init_tsf, np.identity(3)):
+            _plot_point_cloud(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
+        _plot_point_cloud(src @ tsf_.T, c=c, label='Source points, transformed')
+        _plot_point_cloud(tgt, c=next(cs), label='Target points')
 
         c = next(cs)
         if states:
@@ -332,11 +340,11 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
             _plot_matched_points(states[idx_], c=c, ms=1, ls='solid', label='Matched points, final')
 
         c = next(cs)
-        _plot_point_cloud(src, c=c, alpha=0.5, label='Source points')
-        if not np.array_equal(init_tsf, np.identity(3)):
-            _plot_point_cloud(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
-        _plot_point_cloud(src @ tsf_.T, c=c, label='Source points, transformed')
-        _plot_point_cloud(tgt, c=next(cs), label='Target points')
+        plt.plot(0, 0, marker='o', c=c, ms=4)
+        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
+        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
+        for i in zip(unit_sqr, unit_sqr_tsf):
+            _plot_line_seg(*i, with_arrow=True, marker=None, c=c, alpha=0.5)
 
         handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
         by_label = dict(zip(labels, handles))
