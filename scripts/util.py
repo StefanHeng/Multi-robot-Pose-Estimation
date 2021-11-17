@@ -111,6 +111,32 @@ def laser_polar2planar(a_max, a_min, split=False):
     return _get
 
 
+def tsl_n_angle2tsf(tsl=np.array([0, 0]), theta=0):
+    """
+    Converts translation in 2D & an angle into matrix transformation
+
+    :param tsl: Transformation matrix
+    :param theta: Angle in radians
+    """
+    def rot_mat():
+        c, s = np.cos(theta), np.sin(theta)
+        return np.array([
+            [c, -s],
+            [s, c]
+        ])
+    tsf = np.identity(3)
+    tsf[:2, 2] = tsl
+    tsf[:2, :2] = rot_mat()
+    return tsf
+
+
+def tsf2tsl_n_angle(tsf):
+    """
+    :return: 2-tuple of 2D translation and angle in radians from transformation matrix
+    """
+    return tsf[:2, 2], acos(tsf[0][0])
+
+
 def get_rect_pointcloud(w, h, n=240, visualize=False):
     """
     :param w: Width of rectangle
@@ -236,9 +262,9 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
             t_ = f'{t_}, iteration {idx_}'
             plt.suptitle(t_)
 
-        ori_tsl = tsf_[:2, 2]
-        angle = degrees(acos(tsf_[0][0]))
-        ic(tsf_, ori_tsl, angle)
+        tsl, theta = tsf2tsl_n_angle(tsf_)
+        ic(tsf_, tsl, degrees(theta))
+
         unit_sqr = np.array([
             [0, 0],
             [0, 1],
@@ -248,19 +274,25 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         ])
         unit_sqr_tsf = (extend_1s(unit_sqr) @ tsf_.T)[:, :2]
         plt.plot(0, 0, marker='o', c='orange', ms=4)
-        _plot_point_cloud(unit_sqr, label='Unit square', alpha=0.5, ms=0, marker=None)
-        _plot_point_cloud(unit_sqr_tsf, label='Unit square, transformed', alpha=0.8, ms=0.5, marker=None)
-        for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, alpha=0.3, marker=None)
-        if states:
-            _plot_matched_points(states[0], c='g', ms=1, ls='solid', alpha=0.5, label='Matched points, initial')
-            _plot_matched_points(states[idx_], c='g', ms=1, ls='solid', label='Matched points, final ')
 
-        _plot_point_cloud(src, label='Source points', c='c', alpha=0.5)
+        cs = iter(sns.color_palette(palette='husl', n_colors=4))
+        c = next(cs)
+        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.5, label='Unit square')
+        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.8, label='Unit square, transformed')
+        for i in zip(unit_sqr, unit_sqr_tsf):
+            _plot_line_seg(*i, marker=None, c=c, alpha=0.3)
+
+        c = next(cs)
+        if states:
+            _plot_matched_points(states[0], c=c, ms=1, ls='solid', alpha=0.5, label='Matched points, initial')
+            _plot_matched_points(states[idx_], c=c, ms=1, ls='solid', label='Matched points, final')
+
+        c = next(cs)
+        _plot_point_cloud(src, c=c, alpha=0.5, label='Source points')
         if not np.array_equal(init_tsf, np.identity(3)):
-            _plot_point_cloud(src @ init_tsf.T, label='Source points, initial guess', c='c', alpha=0.5)
-        _plot_point_cloud(tgt, label='Target points', c='m')
-        _plot_point_cloud(src @ tsf_.T, label='Source points, transformed', c='c')
+            _plot_point_cloud(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
+        _plot_point_cloud(src @ tsf_.T, c=c, label='Source points, transformed')
+        _plot_point_cloud(tgt, c=next(cs), label='Target points')
 
         handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
         by_label = dict(zip(labels, handles))

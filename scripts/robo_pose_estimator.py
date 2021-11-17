@@ -1,4 +1,3 @@
-import sched, time
 from copy import deepcopy
 
 import numpy as np
@@ -129,6 +128,12 @@ class Icp:
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
+
+            # state = dict(
+            #     src_match=src_match,
+            #     tgt_match=tgt_match,
+            #     tsf=tsf
+            # )
             if verbose:
                 states.append((src_match, tgt_match, tsf))
 
@@ -165,7 +170,7 @@ class Icp:
         def _get_idx(arr):
             def _get(i):
                 """
-                If arr[i[ is not the first occurrence, it's set to -1
+                If arr[i] is not the first occurrence, it's set to -1
                 """
                 i_ = arr_idx(arr, arr[i])
                 return arr[i] if i_ == i else -1
@@ -205,10 +210,10 @@ class Icp:
         return tsf
 
 
-def visualize(a, b, tsf=np.identity(3), mode='static', **kwargs):
-    init_tsf = tsf
-    tsf, states = Icp(a, b)(tsf=tsf, max_iter=100, min_d_err=1e-6, verbose=True)
-    ic(states[:2])
+def visualize(a, b, init_tsf=np.identity(3), mode='static', **kwargs):
+    ic('Initial guess', init_tsf)
+    tsf, states = Icp(a, b)(tsf=init_tsf, max_iter=100, min_d_err=1e-6, verbose=True)
+    # ic(states[:2])
     # states = states[:3]
     plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, mode=mode, **kwargs)
 
@@ -335,11 +340,18 @@ if __name__ == '__main__':
 
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
 
-        title = 'HSR locates KUKA, from the real cluster'
-        tsf = np.identity(3)
-        tsf[:2, -1] = cls.mean(axis=0)
-        ic('init', tsf)
-        visualize(pc_kuka, cls, title=title, tsf=tsf, xlim=[-2, 6], ylim=[-2, 3], mode='static', save=True)
+        visualize(
+            pc_kuka, cls,
+            title='HSR locates KUKA, from the real cluster',
+            init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
+            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
+        )
+        visualize(
+            pc_kuka, cls,
+            title='HSR locates KUKA, from the real cluster, with perfect',
+            init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
+            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
+        )
 
     icp_after_cluster()
 
