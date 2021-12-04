@@ -7,7 +7,7 @@ from functools import reduce
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse
-import matplotlib.transforms as transforms
+from matplotlib import transforms, rcParams
 from matplotlib.widgets import Button
 import seaborn as sns
 import pint
@@ -15,6 +15,7 @@ from icecream import ic
 
 from scripts.data_path import *
 
+rcParams['figure.constrained_layout.use'] = True
 sns.set_style('darkgrid')
 
 
@@ -197,22 +198,26 @@ def laser_polar2planar(a_max, a_min, split=False):
     return _get
 
 
+def rot_mat(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array([
+        [c, -s],
+        [s, c]
+    ])
+
+
 def tsl_n_angle2tsf(tsl=np.array([0, 0]), theta=0):
     """
     Converts translation in 2D & an angle into matrix transformation
 
-    :param tsl: Transformation matrix
+    :param tsl: 3-array of (translation_x, translation_y, theta),
+        or 2-array of (translation_x, translation_y)
     :param theta: Angle in radians
     """
-    def rot_mat():
-        c, s = np.cos(theta), np.sin(theta)
-        return np.array([
-            [c, -s],
-            [s, c]
-        ])
     tsf = np.identity(3)
-    tsf[:2, 2] = tsl
-    tsf[:2, :2] = rot_mat()
+    tsf[:2, 2] = tsl[:2]
+    # ic(tsl[-1] if tsl.size == 3 else theta)
+    tsf[:2, :2] = rot_mat(tsl[-1] if tsl.size == 3 else theta)
     return tsf
 
 

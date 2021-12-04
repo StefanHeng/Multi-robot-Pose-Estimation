@@ -99,6 +99,8 @@ class Icp:
     """
     Implementation of ICP algorithm in 2D
     Given source and target point clouds, returns the translation matrix T s.t. T(source) ~= target
+
+    Modified from [LIDAR Odometry with ICP](https://andrewjkramer.net/lidar-odometry-with-icp/)
     """
 
     def __init__(self, src, tgt):
@@ -109,6 +111,42 @@ class Icp:
         self.src = extend_1s(src)
         self.tgt = extend_1s(tgt)
         self.tree_tgt = KDTree(tgt)
+
+    def pose_error(self, tsf):
+        """
+        :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, theta),
+            or list of proposed translations
+        :return: The error based on closest pair of matched points
+        """
+        def _pose_error(tsf_):
+            # ic(tsf_.shape, tsf_[:5])
+            tsf_ = tsl_n_angle2tsf(tsf_)
+            # ic(tsf_.shape, tsf_[:5])
+            src_match, tgt_match, idxs = self.nn_tgt((self.src @ tsf_.T)[:, :2])
+            return self.pts_match_error(src_match, tgt_match)
+        if len(tsf.shape) == 2:
+            # return np.apply_along_axis(_pose_error, (1, 2), tsf)
+            # return np.apply_over_axes(_pose_error, tsf, axes=(1, 2))
+            return np.apply_along_axis(_pose_error, 1, tsf)
+        else:
+            return _pose_error(tsf)
+
+    def pts_match_error(self, pts1, pts2):
+        """
+        :return: Pair wise euclidian distance/l2-norm between two lists of matched 2d points,
+            normalized by number points
+        """
+        pts1 = pts1[:, :2]
+        pts2 = pts2[:, :2]
+        # ic(pts1.shape, pts2.shape)
+        # ic(pts1, pts2)
+        # return np.sum(np.square(pts1 - pts2)) / pts1.shape[0]
+        # ic(np.linalg.norm(pts1[0] - pts2[0], ord=2))
+        n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
+        # ic(n.shape, n[:5])
+        # n = np.linalg.norm(pts1 - pts2, ord=2, axis=0)
+        # ic(n.shape, n[:5])
+        return n.mean()
 
     def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, verbose=False):
         """
@@ -122,23 +160,12 @@ class Icp:
         err = float('inf')
         d_err = float('inf')
         n = 0
-        # src = self.src  # TODO: implementation wrong with a non-identity initial guess?
+        # src = self.src  # TODO: implementation wrong if non-identity initial guess?
         src = self.src @ tsf.T
         states = []
 
         while d_err > min_d_err and n < max_iter:
             src_match, tgt_match, idxs = self.nn_tgt(src)
-
-            # state = dict(
-            #     src_match=src_match,
-            #     tgt_match=tgt_match,
-            #     tsf=tsf
-            # )
-            if verbose:
-                states.append((src_match, tgt_match, tsf))
-
-            tsf = tsf @ self.svd(src_match, tgt_match)
-            src = self.src @ tsf.T
 
             def _err():
                 src_ = src[idxs[:, 0]]
@@ -147,6 +174,12 @@ class Icp:
             err_ = _err()
             d_err = abs(err - err_)
             err = err_
+
+            if verbose:
+                states.append((src_match, tgt_match, tsf))
+
+            tsf = tsf @ self.svd(src_match, tgt_match)
+            src = self.src @ tsf.T
             n += 1
         return (tsf, states) if verbose else tsf
 
@@ -265,22 +298,49 @@ class PoseEstimator:
             Systematically search for the confidence of robot A's pose, for each x, y, theta setting
             """
             if precision is None:
-                precision = dict(tsl=1e-1, angle=1 / 18)
-            ic(pts.shape, pcr.shape)
+                # precision = dict(tsl=1e-1, angle=1 / 18)
+                precision = dict(tsl=1e0, angle=1 / 2)
+            # ic(pts.shape, pcr.shape)
             ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
             edge = math.ceil(pts2max_dist(pcr))
-            x_ran = [math.ceil(x_min) - edge, math.ceil(x_max) + edge]
-            y_ran = [math.ceil(y_min) - edge, math.ceil(y_max) + edge]
-            ic(x_ran, y_ran)
+            x_ran = [math.floor(x_min) - edge, math.ceil(x_max) + edge]
+            y_ran = [math.floor(y_min) - edge, math.ceil(y_max) + edge]
             opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / precision['tsl']+1))
             opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / precision['tsl']+1))
-            opns_theta = np.linspace(-1, 1, num=int(2 / precision['angle']+1))[1:]
-            ic(opns_x, opns_y, opns_theta)
-            # options = (dict(x=x, y=y, theta=theta) for x in np.linspace())
-            options = cartesian([opns_x, opns_y, opns_theta])
-            ic(options.shape, options[:50])
+            opns_angle = np.linspace(-1, 1, num=int(2 / precision['angle']+1))[1:]
+            opns = cartesian([opns_x,opns_y,opns_angle])
+            ic(opns.shape, opns[:5])
+            # tsfs = np.apply_along_axis(lambda x: tsl_n_angle2tsf(x[:2], x[-1]), 1, options)
+            # ic(tsfs.shape, tsfs[:5])
+            errs = Icp(pcr, pts).pose_error(opns)
+            ic(errs.shape, errs[:10])
+            # n_tsl = errs.size / opns_angle.size
+            ic(opns_angle.size)
+
+            # For each translation (x, y pair), pick the rotation with lowest error
+            opns_tsl = cartesian([opns_x, opns_y])
+            ic(opns_tsl.shape, opns_tsl[:10])
+            errs_max = np.min(errs.reshape(-1, opns_angle.size), axis=-1)
+            ic(errs_max.shape, errs_max[:5])
+            errs_max = errs_max.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
+            ic(errs_max.shape, errs_max)
+
+            fig = plt.figure(figsize=(16, 9))
+            ax = plt.axes(projection='3d')
+            ic(opns_x.shape, opns_y.shape)
+            x, y = np.meshgrid(opns_x, opns_y)
+            ic(x.shape, y.shape, errs_max.shape)
+            ax.plot_surface(*np.meshgrid(opns_x, opns_y), -errs_max,  # Negated for lower error = better
+                            rstride=1, cstride=1,
+                            cmap='viridis', edgecolor='none')
+            ax.plot(pts[:, 0], pts[:, 1], zs=0, zdir='z', label='curve in (x,y)')
+            ax.set_title('surface')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            ax.set_zlabel('Loss optimized by theta')
+            plt.show()
 
     class FuseLaser:
         """

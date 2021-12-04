@@ -283,7 +283,11 @@ if __name__ == '__main__':
     # idxs = np.argsort(keys)
     # ic(idxs, vals[idxs])
 
-    # import numpy as np
+    import numpy as np
     # grid = np.mgrid[[slice(0, 1, 0.1)] * 6]
     # ic(grid.shape)
-    pass
+    X = np.arange(-5, 5, 0.25)
+    Y = np.arange(0, 20, 0.25)
+    X, Y = np.meshgrid(X, Y)
+    ic(X.shape, Y.shape)
+    ic(X, Y)

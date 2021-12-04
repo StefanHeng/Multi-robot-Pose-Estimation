@@ -1,5 +1,5 @@
 """
-Modified from [LIDAR Odometry with ICP](http://andrewjkramer.net/lidar-odometry-with-icp/)
+Modified from [LIDAR Odometry with ICP](https://andrewjkramer.net/lidar-odometry-with-icp/)
 """
 import numpy as np
 from scipy.spatial import KDTree
