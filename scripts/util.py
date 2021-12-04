@@ -291,6 +291,20 @@ def save_fig(save, title):
         plt.savefig(os.path.join(PATH_BASE, DIR_PROJ, 'plot', fnm), dpi=300)
 
 
+def plot_points(arr, **kwargs):
+    """
+    :param arr: Array of 2d points to plot
+    :param kwargs: Arguments are forwarded to `matplotlib.axes.Axes.plot`
+    """
+    kwargs_ = dict(
+        c='orange',
+        marker='.',
+        ms=1,
+        lw=0.5,
+    )
+    plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
+
+
 def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
                     init_tsf=np.identity(3), mode='static', scale=1):
     """
@@ -308,15 +322,6 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
 
     .. note:: Assumes 2d data
     """
-    def _plot_point_cloud(arr, **kwargs):
-        kwargs_ = dict(
-            c='orange',
-            marker='.',
-            ms=1,
-            lw=0.5,
-        )
-        plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
-
     def _plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
         coords = np.array([c1, c2])
         mean = coords.mean(axis=0)
@@ -401,11 +406,11 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
 
         cs = iter(sns.color_palette(palette='husl', n_colors=5))
         c = next(cs)
-        _plot_point_cloud(src, c=c, alpha=0.5, label='Source points')
+        plot_points(src, c=c, alpha=0.5, label='Source points')
         if not np.array_equal(init_tsf, np.identity(3)):
-            _plot_point_cloud(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
-        _plot_point_cloud(src @ tsf_.T, c=c, label='Source points, transformed')
-        _plot_point_cloud(tgt, c=next(cs), label='Target points')
+            plot_points(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
+        plot_points(src @ tsf_.T, c=c, label='Source points, transformed')
+        plot_points(tgt, c=next(cs), label='Target points')
 
         c = next(cs)
         if states:
@@ -414,8 +419,8 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
 
         c = next(cs)
         plt.plot(0, 0, marker='o', c=c, ms=4)
-        _plot_point_cloud(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
-        _plot_point_cloud(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
+        plot_points(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
+        plot_points(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
         for i in zip(unit_sqr, unit_sqr_tsf):
             _plot_line_seg(*i, marker=None, c=c, alpha=0.5)
 

@@ -146,7 +146,8 @@ class Icp:
         # ic(n.shape, n[:5])
         # n = np.linalg.norm(pts1 - pts2, ord=2, axis=0)
         # ic(n.shape, n[:5])
-        return n.mean()
+        # return n.mean()
+        return n.sum() / (n.size**2)
 
     def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, verbose=False):
         """
@@ -297,49 +298,75 @@ class PoseEstimator:
 
             Systematically search for the confidence of robot A's pose, for each x, y, theta setting
             """
+            print(f'Searching by grid for pose estimates on target laser scan with [{pts.shape[0]}] points, with ...')
             if precision is None:
-                # precision = dict(tsl=1e-1, angle=1 / 18)
-                precision = dict(tsl=1e0, angle=1 / 2)
+                precision = dict(tsl=5e-1, angle=1 / 9)
+                # precision = dict(tsl=1e0, angle=1 / 2)
             # ic(pts.shape, pcr.shape)
-            ic(pts.max(axis=0), pts.min(axis=0))
+            # ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
             edge = math.ceil(pts2max_dist(pcr))
             x_ran = [math.floor(x_min) - edge, math.ceil(x_max) + edge]
             y_ran = [math.floor(y_min) - edge, math.ceil(y_max) + edge]
-            opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / precision['tsl']+1))
-            opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / precision['tsl']+1))
-            opns_angle = np.linspace(-1, 1, num=int(2 / precision['angle']+1))[1:]
-            opns = cartesian([opns_x,opns_y,opns_angle])
-            ic(opns.shape, opns[:5])
+
+            prec_tsl = precision['tsl']
+            prec_ang = precision['angle']
+            opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / prec_tsl+1))
+            opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / prec_tsl+1))
+            opns_ang = np.linspace(-1, 1, num=int(2 / prec_ang+1))[1:]
+            opns = cartesian([opns_x, opns_y, opns_ang])
+            print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
+            print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
+            print(f'    angle with precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
+            print(f'    for a total of {opns.size} options')
+            # ic(opns.shape, opns[:5])
             # tsfs = np.apply_along_axis(lambda x: tsl_n_angle2tsf(x[:2], x[-1]), 1, options)
             # ic(tsfs.shape, tsfs[:5])
             errs = Icp(pcr, pts).pose_error(opns)
-            ic(errs.shape, errs[:10])
+            # ic(errs.shape, errs[:5])
             # n_tsl = errs.size / opns_angle.size
-            ic(opns_angle.size)
+            # ic(opns_angle.size)
 
             # For each translation (x, y pair), pick the rotation with lowest error
             opns_tsl = cartesian([opns_x, opns_y])
-            ic(opns_tsl.shape, opns_tsl[:10])
-            errs_max = np.min(errs.reshape(-1, opns_angle.size), axis=-1)
-            ic(errs_max.shape, errs_max[:5])
+            # ic(opns_tsl.shape, opns_tsl[:10])
+            errs_max = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
+            # ic(errs_max.shape, errs_max[:5])
             errs_max = errs_max.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
-            ic(errs_max.shape, errs_max)
+            # ic(errs_max.shape, errs_max)
 
-            fig = plt.figure(figsize=(16, 9))
-            ax = plt.axes(projection='3d')
-            ic(opns_x.shape, opns_y.shape)
-            x, y = np.meshgrid(opns_x, opns_y)
-            ic(x.shape, y.shape, errs_max.shape)
-            ax.plot_surface(*np.meshgrid(opns_x, opns_y), -errs_max,  # Negated for lower error = better
-                            rstride=1, cstride=1,
-                            cmap='viridis', edgecolor='none')
-            ax.plot(pts[:, 0], pts[:, 1], zs=0, zdir='z', label='curve in (x,y)')
+            # fig = plt.figure(figsize=(16, 9))
+            # ax = plt.axes(projection='3d')
+            fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
+            # ic(opns_x.shape, opns_y.shape)
+            # x, y = np.meshgrid(opns_x, opns_y)
+            # ic(x.shape, y.shape, errs_max.shape)
+
+            surf = ax.plot_surface(  # contourf
+                *np.meshgrid(opns_x, opns_y), -errs_max,  # Negated for lower error = better
+                cmap='mako_r', edgecolor='none',
+                label='Loss'
+            )
+            surf._facecolors2d = surf._facecolor3d
+            surf._edgecolors2d = surf._edgecolor3d
+            # ax.plot(
+            #     pts[:, 0], pts[:, 1], zs=0, zdir='z',
+            #     label='Laser scan, target',
+            #     marker='.', ms=1, lw=0.5, c='orange',
+            # )
+            cs = iter(sns.color_palette(palette='husl', n_colors=7))
+            plot_points(pts, zs=0.5, c=next(cs), label='Laser scan, target')
+            plot_points(pcr, zs=0.5, c=next(cs), label='Point cloud representation, source')
+            # fig.colorbar(surf, shrink=0.5, aspect=5)
+            # plt.colorbar(pad=2 ** (-5))
+            plt.colorbar(surf)
             ax.set_title('surface')
             plt.xlabel('x')
             plt.ylabel('y')
-            ax.set_zlabel('Loss optimized by theta')
+            ax.set_zlabel('Loss')
+            plt.legend()
+            plt.title('Grid search, loss against translation, best angle picked')
             plt.show()
 
     class FuseLaser:
