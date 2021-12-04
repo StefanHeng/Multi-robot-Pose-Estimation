@@ -240,36 +240,36 @@ if __name__ == '__main__':
     # ic(arr.shape)
     # draw_path(arr)
 
-    from matplotlib import pyplot as plt
-    import numpy as np
+    # from matplotlib import pyplot as plt
+    # import numpy as np
+    # #
+    # # # plt.rcParams["figure.figsize"] = [7.00, 3.50]
+    # # # plt.rcParams["figure.autolayout"] = True
+    # # # x = np.linspace(-2, 2, 100)
+    # # # y = np.sin(x)
+    # # # plt.plot(x, y, c='b', lw=1)
+    # # # plt.arrow(0, 0, 0.01, np.sin(0.01), shape='full', lw=10,
+    # # #           length_includes_head=True, head_width=.05, color='r')
+    # # # plt.show()
+    # #
+    # def plot_line_seg_arrow(c1, c2, scale=0.01):
+    #     coords = np.array([c1, c2])
+    #     ic(coords)
+    #     mean = coords.mean(axis=0)
+    #     mags = (coords[1] - coords[0]) * scale
+    #     ic(mean, mags)
+    #     plt.arrow(*(mean-mags/2), *mags, head_width=0.05, length_includes_head=True, lw=0, overhang=0.2)
     #
-    # # plt.rcParams["figure.figsize"] = [7.00, 3.50]
-    # # plt.rcParams["figure.autolayout"] = True
-    # # x = np.linspace(-2, 2, 100)
-    # # y = np.sin(x)
-    # # plt.plot(x, y, c='b', lw=1)
-    # # plt.arrow(0, 0, 0.01, np.sin(0.01), shape='full', lw=10,
-    # #           length_includes_head=True, head_width=.05, color='r')
-    # # plt.show()
-    #
-    def plot_line_seg_arrow(c1, c2, scale=0.01):
-        coords = np.array([c1, c2])
-        ic(coords)
-        mean = coords.mean(axis=0)
-        mags = (coords[1] - coords[0]) * scale
-        ic(mean, mags)
-        plt.arrow(*(mean-mags/2), *mags, head_width=0.05, length_includes_head=True, lw=0, overhang=0.2)
-
-    plt.figure(figsize=(16, 9), constrained_layout=True)
-    x = [1, 2, 6]
-    y = [3, 4, 2]
-    plt.plot(x, y, ms=1, lw=0.5)
-    plot_line_seg_arrow(
-        (x[0], y[0]),
-        (x[1], y[1])
-    )
-    plt.gca().set_aspect('equal')
-    plt.show()
+    # plt.figure(figsize=(16, 9), constrained_layout=True)
+    # x = [1, 2, 6]
+    # y = [3, 4, 2]
+    # plt.plot(x, y, ms=1, lw=0.5)
+    # plot_line_seg_arrow(
+    #     (x[0], y[0]),
+    #     (x[1], y[1])
+    # )
+    # plt.gca().set_aspect('equal')
+    # plt.show()
 
     # import numpy as np
     # keys = np.array([
@@ -283,3 +283,7 @@ if __name__ == '__main__':
     # idxs = np.argsort(keys)
     # ic(idxs, vals[idxs])
 
+    # import numpy as np
+    # grid = np.mgrid[[slice(0, 1, 0.1)] * 6]
+    # ic(grid.shape)
+    pass

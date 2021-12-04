@@ -8,7 +8,7 @@ Project under [Barton Research Group](https://brg.engin.umich.edu), via [Multidi
 
 
 
-## Setup 
+## `catkin` package setup 
 
 Go to the `src` folder, run 
 

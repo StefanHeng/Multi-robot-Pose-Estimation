@@ -1,10 +1,10 @@
 from copy import deepcopy
 
+import math
 import numpy as np
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
 from sklearn.mixture import GaussianMixture
-import matplotlib.pyplot as plt
 from icecream import ic
 
 from scripts.util import *
@@ -253,11 +253,34 @@ class PoseEstimator:
             pass
 
         def grid_search(self):
-            self._grid_search(self.pcr_a, self.pts_b)
+            # self._grid_search(self.pcr_a, self.pts_b)
             self._grid_search(self.pcr_b, self.pts_a)
 
-        def _grid_search(self, a, b):
-            ic(a, b)
+        def _grid_search(self, pcr, pts, precision=None):
+            """
+            :param pcr: List of 2D points for robot A's shape
+            :param pts: List of 2D points for laser scan from another robot B that potentially detects robot A
+            :param precision: Dict containing precision of translation in meters and angle in radians to search
+
+            Systematically search for the confidence of robot A's pose, for each x, y, theta setting
+            """
+            if precision is None:
+                precision = dict(tsl=1e-1, angle=1 / 18)
+            ic(pts.shape, pcr.shape)
+            ic(pts.max(axis=0), pts.min(axis=0))
+            x_max, y_max = pts.max(axis=0)
+            x_min, y_min = pts.min(axis=0)
+            edge = math.ceil(pts2max_dist(pcr))
+            x_ran = [math.ceil(x_min) - edge, math.ceil(x_max) + edge]
+            y_ran = [math.ceil(y_min) - edge, math.ceil(y_max) + edge]
+            ic(x_ran, y_ran)
+            opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / precision['tsl']+1))
+            opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / precision['tsl']+1))
+            opns_theta = np.linspace(-1, 1, num=int(2 / precision['angle']+1))[1:]
+            ic(opns_x, opns_y, opns_theta)
+            # options = (dict(x=x, y=y, theta=theta) for x in np.linspace())
+            options = cartesian([opns_x, opns_y, opns_theta])
+            ic(options.shape, options[:50])
 
     class FuseLaser:
         """

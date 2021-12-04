@@ -60,6 +60,21 @@ def eg_hsr_scan(k1=0, k2=77):
     return laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
 
 
+def pts2max_dist(pts):
+    """
+    :param pts: List of 2d points
+    :return: The maximum distance between any two pairs of points
+    """
+    assert pts.shape[1] == 2
+
+    def dist(a, b):
+        return (a[0] - b[0])**2 + (a[1] - b[1])**2
+    n = pts.shape[0]
+    idxs = ((i, j) for i in range(n-1) for j in range(i, n))
+    # ic(list(idxs))
+    return sqrt(max(dist(pts[a], pts[b]) for a, b in idxs))
+
+
 def get_kuka_pointcloud():
     d_dim = config('dimensions.KUKA')
     return get_rect_pointcloud(d_dim['length'], d_dim['width'])
@@ -130,6 +145,28 @@ def extend_1s(arr):
     :param arr: 2D array
     """
     return np.hstack([arr, np.ones([arr.shape[0], 1])])
+
+
+def cartesian(arrs: list, out=None):
+    """
+    :param arrs: list of 1D arrays
+    :param out: Array to place the cartesian product in.
+    :return: Cartesian product of `arrs` of shape
+
+    Modified from https://stackoverflow.com/a/1235363/10732321
+    """
+    arrs = [np.asarray(x) for x in arrs]
+    n = np.prod([x.size for x in arrs])
+    if out is None:
+        out = np.zeros([n, len(arrs)], dtype=arrs[0].dtype)
+
+    m = int(n / arrs[0].size)
+    out[:, 0] = np.repeat(arrs[0], m)
+    if arrs[1:]:
+        cartesian(arrs[1:], out=out[0:m, 1:])
+        for j in range(1, arrs[0].size):
+            out[j*m:(j+1)*m, 1:] = out[0:m, 1:]
+    return out
 
 
 def polar2planar(dist, angle):
@@ -500,4 +537,5 @@ if __name__ == '__main__':
         plt.plot(ptc[:, 0], ptc[:, 1], marker='o', ms=1, lw=0.5)
         plt.show()
 
-    ic(config('dimensions.KUKA.length'))
+    # ic(config('dimensions.KUKA.length'))
+    ic(cartesian([[1, 2, 3], [4, 5], [6, 7]]))
