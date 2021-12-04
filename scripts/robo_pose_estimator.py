@@ -232,29 +232,32 @@ class PoseEstimator:
         2) Pick the pair that makes sense as relative pose
         Note that those should be inverse of each other
         """
-        def __init__(self, ptc_a=None, ptc_b=None, rg_a=None, rg_b=None):
+        def __init__(self, pcr_a=None, pcr_b=None, pts_a=None, pts_b=None):
             """
-            :param ptc_a: Point-cloud representation of `robot_a`
-            :param ptc_b: Point-cloud representation of `robot_b`
-            :param rg_a: Range of laser sensor of `robot_a`
-            :param rg_b: Range of laser sensor of `robot_b`
+            :param pcr_a: Point-cloud representation of `robot_a`
+            :param pcr_b: Point-cloud representation of `robot_b`
+            :param pts_a: List of points of laser readings of `robot_a`
+            :param pts_b: List of points of laser readings of `robot_b`
             """
-            self.ptc_a = ptc_a
-            self.ptc_b = ptc_b
-            self.rg_a = rg_a
-            self.rg_b = rg_b
+            self.pcr_a = pcr_a
+            self.pcr_b = pcr_b
+            self.pts_a = pts_a
+            self.pts_b = pts_b
 
-        def __call__(self, pts_a=None, pts_b=None):
-            # tsf = Icp(pts_a, self.pc_b)()
-            # plot_icp_result(extend_1s(pts_a), self.pc_b, tsf, title='default init', save=True)
+        def __call__(self):
+            # visualize(self.ptc_b, pts_a, tsf=np.array([
+            #     [1, 0, 3],
+            #     [0, 1, -0.5],
+            #     [0, 0, 1]
+            # ]))
+            pass
 
-            # visualize(pts_a, self.pc_b, 'default init from HSR')
-            # visualize(self.pc_b, pts_a, 'default init from KUKA shape')
-            visualize(self.ptc_b, pts_a, tsf=np.array([
-                [1, 0, 3],
-                [0, 1, -0.5],
-                [0, 0, 1]
-            ]))
+        def grid_search(self):
+            self._grid_search(self.pcr_a, self.pts_b)
+            self._grid_search(self.pcr_b, self.pts_a)
+
+        def _grid_search(self, a, b):
+            ic(a, b)
 
     class FuseLaser:
         """
@@ -267,32 +270,28 @@ class PoseEstimator:
 
 
 if __name__ == '__main__':
-    from explore_package.irc_laser_data_eg import src_pts, tgt_pts
-
     def icp_sanity_check():
+        from explore_package.irc_laser_data_eg import src_pts, tgt_pts
         s_pts = src_pts[:, :2]  # Expect 2-dim data points
         t_pts = tgt_pts[:, :2]
         # ic(src_pts.shape, tgt_pts.shape)
 
         t = Icp(s_pts, t_pts)()
         ic(t)
-
+        visualize(
+            s_pts, t_pts,
+            title='Sample data sanity check',
+            # save=True
+        )
     # icp_sanity_check()
 
-    # ptc_kuka = get_rect_pointcloud(
-    #     PoseEstimator.L_KUKA,
-    #     PoseEstimator.W_KUKA,
-    # )
     ptc_kuka = get_kuka_pointcloud()
-    # hsr_scans = json_load('../data/HSR laser 2.json')
-    # s = hsr_scans[77]
-    # pts = laser_polar2planar(s['angle_max'], s['angle_min'])(np.array(s['ranges']))
     pts = eg_hsr_scan()
 
     def check_icp_hsr():
         # Empirically have `robot_a` as HSR, `robot_b` as KUKA
-        fp = PoseEstimator.FusePose(ptc_b=ptc_kuka)
-        ic(fp.ptc_b.shape)
+        fp = PoseEstimator.FusePose(pcr_b=ptc_kuka)
+        ic(fp.pcr_b.shape)
 
         title = 'default init from KUKA shape, good translation guess'
         init_tsf = np.array([
@@ -301,7 +300,6 @@ if __name__ == '__main__':
             [0, 0, 1]
         ])
         visualize(ptc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
-
     # check_icp_hsr()
 
     c = Cluster.cluster
@@ -328,7 +326,6 @@ if __name__ == '__main__':
         hi(2)
         ga()
         db()
-
     # clustering_sanity_check()
 
     def icp_after_cluster():
@@ -347,10 +344,14 @@ if __name__ == '__main__':
             ptc_kuka, cls,
             title='HSR locates KUKA, from the real cluster, good translation estimate',
             init_tsf=tsl_n_angle2tsf(tsl=[2.5, -0.5]),
-            xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
+            xlim=[-1, 5], ylim=[-2, 2], mode='control',
+            save=False
         )
+    # icp_after_cluster()
 
-    icp_after_cluster()
-
+    def grid_search():
+        fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
+        fp.grid_search()
+    grid_search()
 
 

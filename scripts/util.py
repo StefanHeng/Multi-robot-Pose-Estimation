@@ -381,9 +381,7 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         by_label = dict(zip(labels, handles))
         plt.legend(by_label.values(), by_label.keys())
 
-        # if save:
-        #     plt.savefig(f'plot/{t_}.png', dpi=300)
-        save_fig(save, title)
+        save_fig(save, t_)
 
         if mode != 'static':
             plt.pause(1 if mode == 'animate' else 0.1)  # 'control'
@@ -476,8 +474,6 @@ def plot_cluster(data, labels, title=None, save=False):
     plt.title(t)
     plt.legend()
     plt.gca().set_aspect('equal')
-    # if save:
-    #     plt.savefig(f'plot/{t}.png', dpi=300)
     save_fig(save, title)
     plt.show()
 

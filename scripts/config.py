@@ -14,8 +14,8 @@ config = {
     ),
     'dimensions': dict(
         KUKA=dict(
-            length=unit_converter(43),  # In meters
-            width=unit_converter(24)
+            length=unit_converter(41),  # In meters
+            width=unit_converter(25)
         )
     )
 }
