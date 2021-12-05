@@ -303,8 +303,8 @@ class PoseEstimator:
             print(f'   source of [{pcr.shape[0]}] points...')
             if precision is None:
                 # precision = dict(tsl=5e-1, angle=1 / 9)
-                precision = dict(tsl=1e0, angle=1 / 2)
-                # precision = dict(tsl=3e0, angle=1)
+                # precision = dict(tsl=1e0, angle=1 / 2)
+                precision = dict(tsl=3e0, angle=1)
             # ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
@@ -421,8 +421,19 @@ if __name__ == '__main__':
 
     def grid_search():
         fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
-        fp.grid_search(plot=True, plot_kwargs=dict(inverse=True, save=True))
-    # grid_search()
+        fp.grid_search(
+            plot=True,
+            plot_kwargs=dict(
+                inverse=True,
+                # save=True,
+                zlabel='Matched points normalized L2 norm',
+                # interp=False,
+                interp_kwargs=dict(
+                    # method='linear',
+                    # factor=2**2
+                )
+            ))
+    grid_search()
 
     def pick_cmap():
         cmaps = [
@@ -440,20 +451,6 @@ if __name__ == '__main__':
             'twilight',
             'twilight_shifted'
         ]
-        # cmap='mako_r',
-        # cmap='CMRmap',
-        # cmap='RdYlBu',
-        # cmap='Spectral',
-        # cmap='Spectral_r',
-        # cmap='bone',
-        # cmap='gnuplot',
-        # cmap='gnuplot2',
-        # cmap='icefire',
-        # cmap='rainbow',
-        # cmap='rocket',
-        # cmap='terrain_r',
-        # cmap='twilight',
-        # cmap='twilight_shifted',
         fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
         ret = fp.grid_search()
         for cmap in cmaps:
@@ -464,6 +461,6 @@ if __name__ == '__main__':
                     inverse=True, save=True, title=cm,
                     plot3d_kwargs=dict(cmap=cm)
                 )
-    pick_cmap()
+    # pick_cmap()
 
 

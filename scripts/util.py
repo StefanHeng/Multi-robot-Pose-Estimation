@@ -9,7 +9,8 @@ from collections.abc import Iterable
 import numpy as np
 import scipy.interpolate
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Ellipse
+from matplotlib.patches import Rectangle, Ellipse, Circle
+import mpl_toolkits.mplot3d.art3d as art3d
 from matplotlib import transforms, rcParams
 from matplotlib.widgets import Button
 import seaborn as sns
@@ -230,6 +231,16 @@ def tsf2tsl_n_angle(tsf):
     :return: 2-tuple of 2D translation and angle in radians from transformation matrix
     """
     return tsf[:2, 2], acos(tsf[0][0])
+
+
+def apply_tsf_2d(arr, tsf):
+    """
+    Syntactic sugar
+    :param arr: Array of 2D points
+    :param tsf: Transformation matrix in R^{3 x 3}
+    :return: Array of 2D points with transformation matrix applied
+    """
+    return (extend_1s(arr[:, :2]) @ tsf.T)[:, :2]
 
 
 def get_rect_pointcloud(w, h, n=240, visualize=False):
@@ -559,21 +570,23 @@ def interpolate(X, Y, Z, x_coords, y_coords, factor=4, method='cubic'):
     return X_, Y_, Z_
 
 
-def get_offset(arr, up=True, frac=2**4):
+def get_offset(arr, frac=2**4):
     """
     :param arr: Array-like
-    :param up: If true, return an offset above all arr
     :param frac: Difference between range of `arr` and the offset
-    :return: An offset value for `arr`, with a relative gap factor, given a direction of `up` or `down`
+    :return: 2-tuple offset value pair for `arr`, with a relative gap factor,
+        in the order of (`down`, `up`)
     """
-    diff = (arr.max() - arr.min()) / (2 ** 4)
-    return arr.max() + diff if up else arr.min() - diff
+    ma, mi = arr.max(), arr.min()
+    diff = (ma-mi) / frac
+    return mi-diff, ma+diff
 
 
 def plot_grid_search(
         pcr, pts, opns_x, opns_y, opns_ang, errs,
-        interp=True, factor=2**3, inverse=False,
-        title=None, save=False,
+        interp=True, inverse=False,
+        title=None, save=False, zlabel='Loss', offset_frac=2**3,
+        interp_kwargs=None,
         plot3d_kwargs=None
 ):
     """
@@ -588,20 +601,29 @@ def plot_grid_search(
 
     if inverse:
         Z = -Z
+
+    # if interp_kwargs is None:
+    #     interp_kwargs = dict()
+    interp_kwargs = dict(
+        factor=2**3
+    ) | (dict() if interp_kwargs is None else interp_kwargs)
     if interp:
-        X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, factor=factor)
+        X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, **interp_kwargs)
+
+    bot, top = get_offset(Z, frac=offset_frac)  # Level/Height of contour plot & 2d point plots, respectively
+
     if plot3d_kwargs is None:
         plot3d_kwargs = dict()
     ord_3d = 1
-    ord_2d = 100
+    ord_2d = 20
     kwargs_surf = dict(
         zorder=ord_3d, antialiased=True,
-        alpha=0.9, cmap='Spectral_r', edgecolor='none',
+        alpha=0.9, cmap='Spectral_r', edgecolor='black', lw=0.3
         # label='Loss'
     ) | plot3d_kwargs
     kwargs_cont = dict(
         zorder=ord_3d, antialiased=True,
-        linewidths=1, levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=get_offset(Z, up=False), zdir='z',
+        linewidths=1, levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=bot, zdir='z',
         cmap='Spectral_r'
     ) | plot3d_kwargs
     surf = ax.plot_surface(
@@ -614,32 +636,51 @@ def plot_grid_search(
     )
 
     cp = sns.color_palette(palette='husl', n_colors=7)
-    cs = iter(reversed(cp) if inverse else cp)
-    level = get_offset(Z, up=True)  # Level/Height of 2d point plots
-    plot_points([[0, 0]], zs=level, zorder=100, ms=10)
-    plot_points(pts, zorder=ord_2d, zs=level, c=next(cs), label='Laser scan, target')
+    cp = list(reversed(cp)) if inverse else cp
+    cs = iter(cp)
+
+    # Illustrate the ideal translation4
+    bot_, top_ = get_offset(Z, frac=offset_frac/1.25)
+    ic(top_, bot_, top_-bot_)
+    wd = pts2max_dist(pcr)/2
+    pch = Rectangle((-wd/2, bot_), width=wd, height=top_-bot_, fc=cp[-1], zorder=2)
+    ax.add_patch(pch)
+    pch._path2d = pch.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
+    art3d.pathpatch_2d_to_3d(pch, z=0, zdir='y')
+    # p = Circle((5, 5), 3)
+    # ax.add_patch(p)
+    # art3d.pathpatch_2d_to_3d(p, z=0, zdir="x")
+    # from matplotlib.patches import Circle, PathPatch
+    # from matplotlib.text import TextPath
+    # from matplotlib.transforms import Affine2D
+    # p = Circle((5, 5), 3)
+    # ic(p.get_path())
+    # ax.add_patch(p)
+    # p._path2d = p.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
+    # art3d.pathpatch_2d_to_3d(p, z=0, zdir="x")
+
+    plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10)
+    plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label='Laser scan, target')
     c = next(cs)
-    plot_points(pcr, zorder=ord_2d, zs=level, c=c, alpha=0.5, label='Point cloud representation, source')
+    plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
     prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
     plot_points(
         prc_moved,
-        zorder=ord_2d, zs=level, c=c, alpha=0.7,
+        zorder=ord_2d, zs=top, c=c, alpha=0.7,
         label='Point cloud representation at actual pose'
     )
 
     fig.colorbar(surf, shrink=0.5, aspect=2 ** 5)
-    plt.xlabel('x')
-    plt.ylabel('y')
-    ax.set_zlabel('Loss')
-    # surf._facecolors2d = surf._facecolor3d
-    # surf._edgecolors2d = surf._edgecolor3d
+    plt.xlabel('Translation in X (m)')
+    plt.ylabel('Translation in y (m)')
+    ax.set_zlabel(zlabel)
     plt.legend()
     t = r'Loss against translation grid search, by best $\theta$'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
     save_fig(save, t)
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':

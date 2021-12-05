@@ -1,5 +1,7 @@
 from icecream import ic
 
+from util import *
+
 
 if __name__ == '__main__':
     # pass
@@ -342,120 +344,120 @@ if __name__ == '__main__':
     # ax.set_zlabel('$g_4$', fontsize=15, rotation=60)
     # plt.show()
 
-    # Smooth 3D plot https://stackoverflow.com/questions/35157650/smooth-surface-plot-with-pyplot
-    import numpy as np
-    from scipy import interpolate
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import axes3d, Axes3D
-
-    X, Y = np.mgrid[-1:1:20j, -1:1:20j]
-    Z = (X + Y) * np.exp(-6.0 * (X * X + Y * Y)) + np.random.rand(X.shape[0])
-    X = np.array([[-4., -0.75, 2.5, 5.75, 9.],
-                   [-4., -0.75, 2.5, 5.75, 9.],
-                   [-4., -0.75, 2.5, 5.75, 9.],
-                   [-4., -0.75, 2.5, 5.75, 9.],
-                   [-4., -0.75, 2.5, 5.75, 9.]])
-    Y = np.array([[-3., -3., -3., -3., -3.],
-              [0.5, 0.5, 0.5, 0.5, 0.5],
-              [4., 4., 4., 4., 4.],
-              [7.5, 7.5, 7.5, 7.5, 7.5],
-              [11., 11., 11., 11., 11.]])
-    Z = np.array([[-2.82540909, -3.00641217, -1.73795643, -3.14751604, -3.72014602],
-              [-1.01205317, -0.10801578, -0.25385137, -0.50081401, -1.46194579],
-              [-1.00205789, -0.23398504, -0.17424708, -0.97058985, -2.33291644],
-              [-2.08968439, -0.81389158, -2.41424369, -1.2806653, -3.97050193],
-              [-2.37117982, -1.38764977, -3.55121739, -4.35633471, -5.9975255]])
-
-    xnew, ynew = np.mgrid[-1:1:80j, -1:1:80j]
-    ic(xnew, ynew)
-    n = 81
-    # y_, x_ = np.meshgrid(np.linspace(-1, 1, num=n+1), np.linspace(-1, 1, num=n+1))  # Inversed
-    # ic(y_, x_)
-    # assert ynew == y_
-    # assert xnew == x_
-    # ynew, xnew = np.meshgrid(np.linspace(-1, 1, num=17), np.linspace(-1, 1, num=17))  # Inversed
+    # # Smooth 3D plot https://stackoverflow.com/questions/35157650/smooth-surface-plot-with-pyplot
+    # import numpy as np
+    # from scipy import interpolate
+    # import matplotlib.pyplot as plt
+    # from mpl_toolkits.mplot3d import axes3d, Axes3D
+    #
+    # X, Y = np.mgrid[-1:1:20j, -1:1:20j]
+    # Z = (X + Y) * np.exp(-6.0 * (X * X + Y * Y)) + np.random.rand(X.shape[0])
+    # X = np.array([[-4., -0.75, 2.5, 5.75, 9.],
+    #                [-4., -0.75, 2.5, 5.75, 9.],
+    #                [-4., -0.75, 2.5, 5.75, 9.],
+    #                [-4., -0.75, 2.5, 5.75, 9.],
+    #                [-4., -0.75, 2.5, 5.75, 9.]])
+    # Y = np.array([[-3., -3., -3., -3., -3.],
+    #           [0.5, 0.5, 0.5, 0.5, 0.5],
+    #           [4., 4., 4., 4., 4.],
+    #           [7.5, 7.5, 7.5, 7.5, 7.5],
+    #           [11., 11., 11., 11., 11.]])
+    # Z = np.array([[-2.82540909, -3.00641217, -1.73795643, -3.14751604, -3.72014602],
+    #           [-1.01205317, -0.10801578, -0.25385137, -0.50081401, -1.46194579],
+    #           [-1.00205789, -0.23398504, -0.17424708, -0.97058985, -2.33291644],
+    #           [-2.08968439, -0.81389158, -2.41424369, -1.2806653, -3.97050193],
+    #           [-2.37117982, -1.38764977, -3.55121739, -4.35633471, -5.9975255]])
+    #
+    # xnew, ynew = np.mgrid[-1:1:80j, -1:1:80j]
     # ic(xnew, ynew)
-    # xnew, ynew = x_, y_
-    # tck = interpolate.bisplrep(X, Y, Z, s=30)
-    # znew = interpolate.bisplev(xnew[:, 0], ynew[0, :], tck)
-
-    # Here
-    X_ = X.flatten()
-    Y_ = Y.flatten()
-    Z_ = Z.flatten()
-    xi = np.linspace(X_.min(), X_.max(), num=10)
-    yi = np.linspace(Y_.min(), Y_.max(), num=12)
-    ic(xi, yi)
-    # xi = np.linspace(-1, 1, num=n+1)
-    # yi = np.linspace(-1, 1, num=n+1)
-    ic(X_.shape, Y_.shape, xi.shape, yi.shape, xi[None, :].shape, yi[:, None].shape,  Z_.shape)
-    znew = interpolate.griddata((X_, Y_), Z_, (xi[None, :], yi[:, None]), method='linear')
-    ic(X.shape, Y.shape, znew.shape)
-    ic(xi[None, :], xi.reshape(1, -1))
-    np.testing.assert_almost_equal(xi[None, :], xi.reshape(1, -1))
-
-    fig = plt.figure(figsize=(12, 12))
-    ax = fig.gca(projection='3d')
-    ax.plot_surface(X, Y, Z, cmap='summer', rstride=1, cstride=1, alpha=None)
-    plt.show()
-
-    fig = plt.figure(figsize=(12, 12))
-    ax = fig.gca(projection='3d')
-    xnew, ynew = np.meshgrid(xi, yi)
-    ax.plot_surface(xnew, ynew, znew, cmap='summer', rstride=1, cstride=1, alpha=0.6, antialiased=True)
-    plt.show()
-    exit(1)
+    # n = 81
+    # # y_, x_ = np.meshgrid(np.linspace(-1, 1, num=n+1), np.linspace(-1, 1, num=n+1))  # Inversed
+    # # ic(y_, x_)
+    # # assert ynew == y_
+    # # assert xnew == x_
+    # # ynew, xnew = np.meshgrid(np.linspace(-1, 1, num=17), np.linspace(-1, 1, num=17))  # Inversed
+    # # ic(xnew, ynew)
+    # # xnew, ynew = x_, y_
+    # # tck = interpolate.bisplrep(X, Y, Z, s=30)
+    # # znew = interpolate.bisplev(xnew[:, 0], ynew[0, :], tck)
+    #
+    # # Here
+    # X_ = X.flatten()
+    # Y_ = Y.flatten()
+    # Z_ = Z.flatten()
+    # xi = np.linspace(X_.min(), X_.max(), num=10)
+    # yi = np.linspace(Y_.min(), Y_.max(), num=12)
+    # ic(xi, yi)
+    # # xi = np.linspace(-1, 1, num=n+1)
+    # # yi = np.linspace(-1, 1, num=n+1)
+    # ic(X_.shape, Y_.shape, xi.shape, yi.shape, xi[None, :].shape, yi[:, None].shape,  Z_.shape)
+    # znew = interpolate.griddata((X_, Y_), Z_, (xi[None, :], yi[:, None]), method='linear')
+    # ic(X.shape, Y.shape, znew.shape)
+    # ic(xi[None, :], xi.reshape(1, -1))
+    # np.testing.assert_almost_equal(xi[None, :], xi.reshape(1, -1))
+    #
+    # fig = plt.figure(figsize=(12, 12))
+    # ax = fig.gca(projection='3d')
+    # ax.plot_surface(X, Y, Z, cmap='summer', rstride=1, cstride=1, alpha=None)
+    # plt.show()
+    #
+    # fig = plt.figure(figsize=(12, 12))
+    # ax = fig.gca(projection='3d')
+    # xnew, ynew = np.meshgrid(xi, yi)
+    # ax.plot_surface(xnew, ynew, znew, cmap='summer', rstride=1, cstride=1, alpha=0.6, antialiased=True)
+    # plt.show()
+    # exit(1)
 
     # https://stackoverflow.com/questions/33287620/creating-a-smooth-surface-plot-from-topographic-data-using-matplotlib
-    import os
-    import numpy as np
-    from mpl_toolkits.mplot3d import Axes3D
-    import matplotlib.pyplot as plt
-    from scipy.interpolate import griddata
-
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    # my_data = np.genfromtxt('2014_0.01_v3_HDF5.txt', delimiter=',', skip_header=1)
-    # my_data[my_data == 0] = np.nan
-    # my_data = my_data[~np.isnan(my_data).any(axis=1)]
-    my_data = []
-    n1, n2 = X.shape
-    for i in range(n1):
-        for j in range(n2):
-            my_data.append([X[i][j], Y[i][j], Z[i][j]])
-    my_data = np.array(my_data)
-    X = my_data[:, 0]
-    Y = my_data[:, 1]
-    Z = my_data[:, 2]
-    xi = np.linspace(X.min(), X.max(), num=int(len(Z) / 3))
-    yi = np.linspace(Y.min(), Y.max(), num=int(len(Z) / 3))
-    zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='nearest')
-
-    xig, yig = np.meshgrid(xi, yi)
-
-    surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
-    ic(xig.shape, yig.shape, zi.shape)
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    ax.set_title('2014 ATM Data 0.01 Degree Spacing')
-    ax.set_xlabel('Latitude')
-    ax.set_ylabel('Longitude')
-    ax.set_zlabel('Elevation (m)')
-    # ax.set_zlim3d(0, 8000)
-    plt.show()
-
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='cubic')
-    xig, yig = np.meshgrid(xi, yi)
-
-    surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    ax.set_title('2014 ATM Data 0.01 Degree Spacing')
-    ax.set_xlabel('Latitude')
-    ax.set_ylabel('Longitude')
-    ax.set_zlabel('Elevation (m)')
-    # ax.set_zlim3d(0, 8000)
-    plt.show()
+    # import os
+    # import numpy as np
+    # from mpl_toolkits.mplot3d import Axes3D
+    # import matplotlib.pyplot as plt
+    # from scipy.interpolate import griddata
+    #
+    # fig = plt.figure()
+    # ax = Axes3D(fig)
+    # # my_data = np.genfromtxt('2014_0.01_v3_HDF5.txt', delimiter=',', skip_header=1)
+    # # my_data[my_data == 0] = np.nan
+    # # my_data = my_data[~np.isnan(my_data).any(axis=1)]
+    # my_data = []
+    # n1, n2 = X.shape
+    # for i in range(n1):
+    #     for j in range(n2):
+    #         my_data.append([X[i][j], Y[i][j], Z[i][j]])
+    # my_data = np.array(my_data)
+    # X = my_data[:, 0]
+    # Y = my_data[:, 1]
+    # Z = my_data[:, 2]
+    # xi = np.linspace(X.min(), X.max(), num=int(len(Z) / 3))
+    # yi = np.linspace(Y.min(), Y.max(), num=int(len(Z) / 3))
+    # zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='nearest')
+    #
+    # xig, yig = np.meshgrid(xi, yi)
+    #
+    # surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
+    # ic(xig.shape, yig.shape, zi.shape)
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+    # ax.set_title('2014 ATM Data 0.01 Degree Spacing')
+    # ax.set_xlabel('Latitude')
+    # ax.set_ylabel('Longitude')
+    # ax.set_zlabel('Elevation (m)')
+    # # ax.set_zlim3d(0, 8000)
+    # plt.show()
+    #
+    # fig = plt.figure()
+    # ax = Axes3D(fig)
+    # zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='cubic')
+    # xig, yig = np.meshgrid(xi, yi)
+    #
+    # surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
+    # fig.colorbar(surf, shrink=0.5, aspect=5)
+    # ax.set_title('2014 ATM Data 0.01 Degree Spacing')
+    # ax.set_xlabel('Latitude')
+    # ax.set_ylabel('Longitude')
+    # ax.set_zlabel('Elevation (m)')
+    # # ax.set_zlim3d(0, 8000)
+    # plt.show()
 
     # # https://stackoverflow.com/a/70156524/10732321
     # import numpy as np
@@ -485,3 +487,179 @@ if __name__ == '__main__':
     #
     # plt.show()
 
+    # https://matplotlib.org/stable/gallery/mplot3d/pathpatch3d.html
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle, PathPatch
+    from matplotlib.text import TextPath
+    from matplotlib.transforms import Affine2D
+    import mpl_toolkits.mplot3d.art3d as art3d
+
+
+    def text3d(ax, xyz, s, zdir="z", size=None, angle=0, usetex=False, **kwargs):
+        """
+        Plots the string *s* on the axes *ax*, with position *xyz*, size *size*,
+        and rotation angle *angle*. *zdir* gives the axis which is to be treated as
+        the third dimension. *usetex* is a boolean indicating whether the string
+        should be run through a LaTeX subprocess or not.  Any additional keyword
+        arguments are forwarded to `.transform_path`.
+
+        Note: zdir affects the interpretation of xyz.
+        """
+        x, y, z = xyz
+        if zdir == "y":
+            xy1, z1 = (x, z), y
+        elif zdir == "x":
+            xy1, z1 = (y, z), x
+        else:
+            xy1, z1 = (x, y), z
+
+        text_path = TextPath((0, 0), s, size=size, usetex=usetex)
+        trans = Affine2D().rotate(angle).translate(xy1[0], xy1[1])
+
+        p1 = PathPatch(trans.transform_path(text_path), **kwargs)
+        ax.add_patch(p1)
+        art3d.pathpatch_2d_to_3d(p1, z=z1, zdir=zdir)
+
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+
+    # Draw a circle on the x=0 'wall'
+    p = Circle((5, 5), 3)
+    ax.add_patch(p)
+    art3d.pathpatch_2d_to_3d(p, z=0, zdir="x")
+
+    # Manually label the axes
+    text3d(ax, (4, -2, 0), "X-axis", zdir="z", size=.5, usetex=False,
+           ec="none", fc="k")
+    text3d(ax, (12, 4, 0), "Y-axis", zdir="z", size=.5, usetex=False,
+           angle=np.pi / 2, ec="none", fc="k")
+    text3d(ax, (12, 10, 4), "Z-axis", zdir="y", size=.5, usetex=False,
+           angle=np.pi / 2, ec="none", fc="k")
+
+    # Write a Latex formula on the z=0 'floor'
+    text3d(ax, (1, 5, 0),
+           r"$\displaystyle G_{\mu\nu} + \Lambda g_{\mu\nu} = "
+           r"\frac{8\pi G}{c^4} T_{\mu\nu}  $",
+           zdir="z", size=1, usetex=True,
+           ec="none", fc="k")
+
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.set_zlim(0, 10)
+
+    plt.show()
+    exit(1)
+
+    # https://stackoverflow.com/questions/18228966/how-can-matplotlib-2d-patches-be-transformed-to-3d-with-arbitrary-normals#comment26758349_18228967
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import proj3d
+    from matplotlib.patches import Circle, Rectangle
+    from itertools import product
+    from mpl_toolkits.mplot3d import art3d
+
+    def rotation_matrix(d):
+        """
+        Calculates a rotation matrix given a vector d. The direction of d
+        corresponds to the rotation axis. The length of d corresponds to
+        the sin of the angle of rotation.
+
+        Variant of: http://mail.scipy.org/pipermail/numpy-discussion/2009-March/040806.html
+        """
+        sin_angle = np.linalg.norm(d)
+
+        if sin_angle == 0:
+            return np.identity(3)
+
+        d /= sin_angle
+
+        eye = np.eye(3)
+        ddt = np.outer(d, d)
+        skew = np.array([[0, d[2], -d[1]],
+                         [-d[2], 0, d[0]],
+                         [d[1], -d[0], 0]], dtype=np.float64)
+
+        M = ddt + np.sqrt(1 - sin_angle ** 2) * (eye - ddt) + sin_angle * skew
+        return M
+
+
+    def pathpatch_2d_to_3d(pathpatch, z=0, normal='z'):
+        """
+        Transforms a 2D Patch to a 3D patch using the given normal vector.
+
+        The patch is projected into they XY plane, rotated about the origin
+        and finally translated by z.
+        """
+        if type(normal) is str:  # Translate strings to normal vectors
+            index = "xyz".index(normal)
+            # ic(normal, np.roll((1.0, 0, 0), index))
+            normal = np.roll((1.0, 0, 0), index)
+
+        normal /= np.linalg.norm(normal)  # Make sure the vector is normalised
+
+        path = pathpatch.get_path()  # Get the path and the associated transform
+        trans = pathpatch.get_patch_transform()
+
+        path = trans.transform_path(path)  # Apply the transform
+
+        pathpatch.__class__ = art3d.PathPatch3D  # Change the class
+        pathpatch._code3d = path.codes  # Copy the codes
+        pathpatch._facecolor3d = pathpatch.get_facecolor  # Get the face color
+
+        verts = path.vertices  # Get the vertices in 2D
+
+        d = np.cross(normal, (0, 0, 1))  # Obtain the rotation vector
+        M = rotation_matrix(d)  # Get the rotation matrix
+        # ic(normal, d, M)
+
+        pathpatch._segment3d = np.array([np.dot(M, (x, y, 0)) + (0, 0, z) for x, y in verts])
+
+
+    def pathpatch_translate(pathpatch, delta):
+        """
+        Translates the 3D pathpatch by the amount delta.
+        """
+        pathpatch._segment3d += delta
+        # ic(pathpatch._segment3d)
+
+
+    fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
+    # ax = axes(projection='3d')  # Create axes
+
+    p = Circle((0, 0), .2)  # Add a circle in the yz plane
+    ax.add_patch(p)
+    pathpatch_2d_to_3d(p, z=0.5, normal='x')
+    pathpatch_translate(p, (0, 0.5, 0))
+
+    p = Circle((0, 0), .2, facecolor='r')  # Add a circle in the xz plane
+    ax.add_patch(p)
+    pathpatch_2d_to_3d(p, z=0.5, normal='y')
+    pathpatch_translate(p, (0.5, 1, 0))
+
+    p = Circle((0, 0), .2, facecolor='g')  # Add a circle in the xy plane
+    ax.add_patch(p)
+    pathpatch_2d_to_3d(p, z=0, normal='z')
+    pathpatch_translate(p, (0.5, 0.5, 0))
+
+    p = Rectangle((0, 0), 0.25, 1, fc='pink', alpha=0.5)
+    ax.add_patch(p)
+    # pathpatch_2d_to_3d(p, z=0, normal='y')
+    pathpatch_2d_to_3d(p, z=0, normal=(0, 0.1, 0))
+    pathpatch_translate(p, (0, 0, 1))
+    tsf = tsl_n_angle2tsf([0, 0, -0.15])
+    ic(p._segment3d)
+    ic(p._segment3d[:, :2].shape)
+    p._segment3d[:, :2] = apply_tsf_2d(p._segment3d, tsf)
+
+    for normal in product((-1, 1), repeat=3):
+        # ic(normal)
+        p = Circle((0, 0), .2, facecolor='y', alpha=.2)
+        ax.add_patch(p)
+        pathpatch_2d_to_3d(p, z=0, normal=normal)
+        pathpatch_translate(p, 0.5)
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.show()
