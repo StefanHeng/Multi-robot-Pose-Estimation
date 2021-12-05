@@ -530,7 +530,7 @@ def plot_cluster(data, labels, title=None, save=False):
     plt.title(t)
     plt.legend()
     plt.gca().set_aspect('equal')
-    save_fig(save, title)
+    save_fig(save, t)
     plt.show()
 
 
@@ -559,64 +559,71 @@ def interpolate(X, Y, Z, x_coords, y_coords, factor=4, method='cubic'):
     return X_, Y_, Z_
 
 
-def plot_grid_search(pcr, pts, opns_x, opns_y, opns_ang, errs, interp=True, factor=2**3):
+def get_offset(arr, up=True, frac=2**4):
     """
-    Plot grid search result per `PoseEstimator.FusePose`
+    :param arr: Array-like
+    :param up: If true, return an offset above all arr
+    :param frac: Difference between range of `arr` and the offset
+    :return: An offset value for `arr`, with a relative gap factor, given a direction of `up` or `down`
+    """
+    diff = (arr.max() - arr.min()) / (2 ** 4)
+    return arr.max() + diff if up else arr.min() - diff
 
-    Plots loss against translation, for each setup, the angle with the lowest loss is picked
+
+def plot_grid_search(
+        pcr, pts, opns_x, opns_y, opns_ang, errs,
+        interp=True, factor=2**3, inverse=False,
+        title=None, save=False,
+        plot3d_kwargs=None
+):
     """
-    # For each translation (x, y pair), pick the rotation with the lowest error
+    Plot grid search result per `PoseEstimator.FusePose`, i.e. for the get-pose first approach
+
+    Plots loss against translation (x, y pair), for each setup, the angle/rotation with the lowest loss is picked
+    """
     errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
     errs_best_ang = errs_best_ang.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
-
     fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
     [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_best_ang  # Negated cos lower error = better
+
+    if inverse:
+        Z = -Z
     if interp:
         X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, factor=factor)
+    if plot3d_kwargs is None:
+        plot3d_kwargs = dict()
     ord_3d = 1
     ord_2d = 100
+    kwargs_surf = dict(
+        zorder=ord_3d, antialiased=True,
+        alpha=0.9, cmap='Spectral_r', edgecolor='none',
+        # label='Loss'
+    ) | plot3d_kwargs
+    kwargs_cont = dict(
+        zorder=ord_3d, antialiased=True,
+        linewidths=1, levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=get_offset(Z, up=False), zdir='z',
+        cmap='Spectral_r'
+    ) | plot3d_kwargs
     surf = ax.plot_surface(
         X, Y, Z,
-        # cmap='mako_r',
-        # cmap='CMRmap',
-        # cmap='RdYlBu',
-        # cmap='Spectral',
-        cmap='Spectral_r',
-        # cmap='bone',
-        # cmap='gnuplot',
-        # cmap='gnuplot2',
-        # cmap='icefire',
-        # cmap='rainbow',
-        # cmap='rocket',
-        # cmap='terrain_r',
-        # cmap='twilight',
-        # cmap='twilight_shifted',
-        # rcount=2 ** 10, ccount=2 ** 10,
-        edgecolor='none',
-        antialiased=False,
-        label='Loss',
-        alpha=0.75,
-        zorder=ord_3d
+        **kwargs_surf
     )
     ax.contour(
         X, Y, Z,
-        levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=Z.min() - (Z.max() - Z.min()) / (2 ** 4), zdir='z',
-        cmap='Spectral_r',
-        linewidths=1,
-        zorder=ord_3d,
+        **kwargs_cont
     )
 
-    cs = iter(sns.color_palette(palette='husl', n_colors=7))
-    lvl = 7  # Level/Height of 2d point plots
-    # ax.plot(xs=pts[:, 0], ys=pts[:, 1], zs=lvl, c=next(cs), label='Laser scan, target', zorder=ord_2d)
-    plot_points([[0, 0]], zs=lvl, zorder=100, ms=10)
-    plot_points(pts, zorder=ord_2d, zs=lvl, c=next(cs), label='Laser scan, target')
+    cp = sns.color_palette(palette='husl', n_colors=7)
+    cs = iter(reversed(cp) if inverse else cp)
+    level = get_offset(Z, up=True)  # Level/Height of 2d point plots
+    plot_points([[0, 0]], zs=level, zorder=100, ms=10)
+    plot_points(pts, zorder=ord_2d, zs=level, c=next(cs), label='Laser scan, target')
     c = next(cs)
-    plot_points(pcr, zorder=ord_2d, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
+    plot_points(pcr, zorder=ord_2d, zs=level, c=c, alpha=0.5, label='Point cloud representation, source')
     prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
     plot_points(
         prc_moved,
-        zorder=ord_2d, zs=lvl, c=c, alpha=0.7,
+        zorder=ord_2d, zs=level, c=c, alpha=0.7,
         label='Point cloud representation at actual pose'
     )
 
@@ -624,11 +631,15 @@ def plot_grid_search(pcr, pts, opns_x, opns_y, opns_ang, errs, interp=True, fact
     plt.xlabel('x')
     plt.ylabel('y')
     ax.set_zlabel('Loss')
-    surf._facecolors2d = surf._facecolor3d
-    surf._edgecolors2d = surf._edgecolor3d
+    # surf._facecolors2d = surf._facecolor3d
+    # surf._edgecolors2d = surf._edgecolor3d
     plt.legend()
-    plt.title('Grid search, loss against translation, best angle picked')
-    plt.show()
+    t = r'Loss against translation grid search, by best $\theta$'
+    if title:
+        t = f'{t}, {title}'
+    plt.title(t)
+    save_fig(save, t)
+    # plt.show()
 
 
 if __name__ == '__main__':

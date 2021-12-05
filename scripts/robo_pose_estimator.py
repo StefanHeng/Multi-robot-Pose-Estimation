@@ -280,11 +280,12 @@ class PoseEstimator:
             # ]))
             pass
 
-        def grid_search(self, plot=True):
+        def grid_search(self, plot=False, plot_kwargs=None):
             # self._grid_search(self.pcr_a, self.pts_b)
             ret = self._grid_search(self.pcr_b, self.pts_a)
             if plot:
-                plot_grid_search(self.pcr_b, self.pts_a, *ret)
+                plot_grid_search(self.pcr_b, self.pts_a, *ret, **plot_kwargs)
+            return ret
 
         @staticmethod
         def _grid_search(pcr, pts, precision=None):
@@ -420,7 +421,49 @@ if __name__ == '__main__':
 
     def grid_search():
         fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
-        fp.grid_search()
-    grid_search()
+        fp.grid_search(plot=True, plot_kwargs=dict(inverse=True, save=True))
+    # grid_search()
+
+    def pick_cmap():
+        cmaps = [
+            'mako',
+            'CMRmap',
+            'RdYlBu',
+            'Spectral',
+            'bone',
+            'gnuplot',
+            'gnuplot2',
+            'icefire',
+            'rainbow',
+            'rocket',
+            'terrain',
+            'twilight',
+            'twilight_shifted'
+        ]
+        # cmap='mako_r',
+        # cmap='CMRmap',
+        # cmap='RdYlBu',
+        # cmap='Spectral',
+        # cmap='Spectral_r',
+        # cmap='bone',
+        # cmap='gnuplot',
+        # cmap='gnuplot2',
+        # cmap='icefire',
+        # cmap='rainbow',
+        # cmap='rocket',
+        # cmap='terrain_r',
+        # cmap='twilight',
+        # cmap='twilight_shifted',
+        fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
+        ret = fp.grid_search()
+        for cmap in cmaps:
+            ic(cmap)
+            for cm in [cmap, f'{cmap}_r']:
+                plot_grid_search(
+                    fp.pcr_b, fp.pts_a, *ret,
+                    inverse=True, save=True, title=cm,
+                    plot3d_kwargs=dict(cmap=cm)
+                )
+    pick_cmap()
 
 
