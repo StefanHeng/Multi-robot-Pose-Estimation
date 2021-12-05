@@ -142,6 +142,99 @@ class Loss:
                 idxs_pair_uniq
             )
 
+    def __init__(self, tgt):
+        """
+        :param tgt: List of 2d points, a base set of points to compute loss
+        """
+        self.nn = Loss.NearestNeighbor(tgt)
+        self.tgt = self.nn.tgt  # Save memory
+
+    def pose_error(self, src, tsf, labels=None):
+        """
+        :param src: List of 2d points to match target points
+        :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
+            or list of proposed translations
+        :param labels: 1D list, cluster assignments for `src` points,
+            where the loss for each cluster is computed independently
+        :return: If `labels` unspecified, the error based on closest pair of matched points;
+            If `labels` specified, the lowest error returned among all clusters
+        """
+        if labels is None:
+            def _pose_error(tsf_):
+                # ic(tsf_, src.shape)
+                # src_match, tgt_match, idxs = self.nn((extend_1s(src) @ tsl_n_angle2tsf(tsf_).T)[:, :2])
+                src_match, tgt_match, idxs = self.nn(apply_tsf_2d(src, tsl_n_angle2tsf(tsf_)))
+                err = self.pts_match_error(src_match, tgt_match)
+                return err
+            if len(tsf.shape) == 2:
+                return np.apply_along_axis(_pose_error, 1, tsf)
+            else:
+                return _pose_error(tsf)
+        else:
+            ic(labels)
+            d_clusters = {lb: pts_hsr[np.where(labels == lb)] for lb in np.unique(labels)}
+            ic(d_clusters)
+            exit(1)
+
+    @staticmethod
+    def pts_match_error(pts1, pts2):
+        """
+        :return: Pair wise euclidian distance/l2-norm between two lists of matched 2d points,
+            normalized by number points
+        """
+        pts1 = pts1[:, :2]
+        pts2 = pts2[:, :2]
+        n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
+        # return n.sum() / (n.size**2)
+        return n.mean()
+
+
+class Search:
+    @staticmethod
+    def grid_search(pts, precision=None, labels=None, reverse=False):
+        """
+        # :param pcr: List of 2D points for robot A's shape
+        # :param pts: List of 2D points for laser scan from another robot B that potentially detects robot A
+        :param pts: 2-tuple of list of 2D points to match, (source points, target points)
+        :param precision: Dict containing precision of translation in meters and angle in radians to search
+        :param labels: List of cluster assignments, for the target points
+            If specified, the target points are split by clusters where matched points is computed for each cluster
+        :param reverse: If true, `pts` are treated as source and targets inversely
+        :return: 4-tuple of (X translation options, Y translation options, Angle options,
+            Corresponding error for each setup combination)
+
+        Systematically search for the confidence of robot A's pose, for each x, y, theta setting
+        """
+        if precision is None:
+            # precision = dict(tsl=5e-1, angle=1 / 9)
+            precision = dict(tsl=1e0, angle=1 / 2)
+            # precision = dict(tsl=3e0, angle=1)
+        src, tgt = reversed(pts) if reverse else pts
+        print(f'Grid-searching for pose estimates on ... ')
+        print(f'    target of [{tgt.shape[0]}] points, and ')
+        print(f'    source of [{src.shape[0]}] points ... ')
+        # ic(pts.max(axis=0), pts.min(axis=0))
+        x_max, y_max = tgt.max(axis=0)
+        x_min, y_min = tgt.min(axis=0)
+        edge = pts2max_dist(src)
+        x_ran = [math.floor(x_min-edge), math.ceil(x_max+edge)]
+        y_ran = [math.floor(y_min-edge), math.ceil(y_max+edge)]
+
+        prec_tsl = precision['tsl']
+        prec_ang = precision['angle']
+        opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / prec_tsl+1))
+        opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / prec_tsl+1))
+        opns_ang = np.linspace(-1, 1, num=int(2 / prec_ang+1))[1:]
+        opns = cartesian([opns_x, opns_y, opns_ang])
+        print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
+        print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
+        print(f'    angle with precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
+        print(f'    for a combined [{opns.size}] candidates... ')
+
+        errs = Loss(tgt).pose_error(src, opns, labels=labels)
+        print(f'... completed')
+        return opns_x, opns_y, opns_ang, errs
+
 
 class Icp:
     """
@@ -159,35 +252,7 @@ class Icp:
         self.nn = Loss.NearestNeighbor(tgt)
         # Should stay unchanged across program duration
         self.src = extend_1s(src)
-        # self.tgt = extend_1s(tgt)
-        self.tgt = self.nn.tgt  # Save memory
-
-    def pose_error(self, tsf):
-        """
-        :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, theta),
-            or list of proposed translations
-        :return: The error based on closest pair of matched points
-        """
-        def _pose_error(tsf_):
-            src_match, tgt_match, idxs = self.nn((self.src @ tsl_n_angle2tsf(tsf_).T)[:, :2])
-            err = self.pts_match_error(src_match, tgt_match)
-            return err
-        if len(tsf.shape) == 2:
-            return np.apply_along_axis(_pose_error, 1, tsf)
-        else:
-            return _pose_error(tsf)
-
-    @staticmethod
-    def pts_match_error(pts1, pts2):
-        """
-        :return: Pair wise euclidian distance/l2-norm between two lists of matched 2d points,
-            normalized by number points
-        """
-        pts1 = pts1[:, :2]
-        pts2 = pts2[:, :2]
-        n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
-        # return n.sum() / (n.size**2)
-        return n.mean()
+        self.tgt = self.nn.tgt
 
     def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, verbose=False):
         """
@@ -291,53 +356,15 @@ class PoseEstimator:
             # ]))
             pass
 
-        def grid_search(self, precision=None, plot=False, plot_kwargs=None):
-            if precision is None:
-                # precision = dict(tsl=5e-1, angle=1 / 9)
-                precision = dict(tsl=1e0, angle=1 / 2)
-                # precision = dict(tsl=3e0, angle=1)
+        def grid_search(self, precision=None, labels=None, reverse_pts=False, plot=False, plot_kwargs=None):
+            def get_pts(a, b):
+                return (b, a) if reverse_pts else (a, b)
 
-            # self._grid_search(self.pcr_a, self.pts_b)
-            ret = self._grid_search(self.pcr_b, self.pts_a, precision=precision)
+            # ret1 = Search.grid_search(get_pts(self.pcr_a, self.pts_b), precision=precision, labels=labels)
+            ret2 = Search.grid_search(get_pts(self.pcr_b, self.pts_a), precision=precision, labels=labels)
             if plot:
-                plot_grid_search(self.pcr_b, self.pts_a, *ret, **plot_kwargs)
-            return ret
-
-        @staticmethod
-        def _grid_search(pcr, pts, precision=None):
-            """
-            :param pcr: List of 2D points for robot A's shape
-            :param pts: List of 2D points for laser scan from another robot B that potentially detects robot A
-            :param precision: Dict containing precision of translation in meters and angle in radians to search
-            :return: 4-tuple of (X translation options, Y translation options, Angle options,
-                Corresponding error for each setup combination)
-
-            Systematically search for the confidence of robot A's pose, for each x, y, theta setting
-            """
-            print(f'Grid-searching for pose estimates on...')
-            print(f'   target of [{pts.shape[0]}] points, and')
-            print(f'   source of [{pcr.shape[0]}] points...')
-            # ic(pts.max(axis=0), pts.min(axis=0))
-            x_max, y_max = pts.max(axis=0)
-            x_min, y_min = pts.min(axis=0)
-            edge = pts2max_dist(pcr)
-            x_ran = [math.floor(x_min-edge), math.ceil(x_max+edge)]
-            y_ran = [math.floor(y_min-edge), math.ceil(y_max+edge)]
-
-            prec_tsl = precision['tsl']
-            prec_ang = precision['angle']
-            opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / prec_tsl+1))
-            opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / prec_tsl+1))
-            opns_ang = np.linspace(-1, 1, num=int(2 / prec_ang+1))[1:]
-            opns = cartesian([opns_x, opns_y, opns_ang])
-            print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
-            print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
-            print(f'    angle with precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
-            print(f'    for a combined [{opns.size}] candidates')
-
-            errs = Icp(pcr, pts).pose_error(opns)
-            print(f'... completed')
-            return opns_x, opns_y, opns_ang, errs
+                plot_grid_search(self.pcr_b, self.pts_a, *ret2, **plot_kwargs)
+            return ret2
 
     class FuseLaser:
         """
@@ -379,7 +406,12 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(ptc_kuka, pts_hsr, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
+        visualize(
+            ptc_kuka, pts_hsr, init_tsf=init_tsf,
+            title=title, save=False,
+            xlim=[-2, 6], ylim=[-2, 2],
+            mode='static'
+        )
     # check_icp_hsr()
 
     cls = Cluster.cluster
@@ -409,9 +441,8 @@ if __name__ == '__main__':
     # clustering_sanity_check()
 
     def icp_after_cluster():
-        cls = Cluster.cluster
         # A good clustering result by empirical inspection
-        lbs = cls(pts_hsr, approach='hierarchical', distance_threshold=1)
+        lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
         d_clusters = {lb: pts_hsr[np.where(lbs == lb)] for lb in np.unique(lbs)}
 
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
@@ -434,13 +465,13 @@ if __name__ == '__main__':
     def grid_search():
         fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
         fp.grid_search(
-            precision=dict(tsl=0.25, angle=1/20),
+            # precision=dict(tsl=0.25, angle=1/20),
             plot=True,
             plot_kwargs=dict(
                 inverse=True,
                 # save=True,
-                tsf_ideal=tsl_n_angle2tsf([2.5, -0.75], -0.15),
-                zlabel='Matched points normalized L2 norm',
+                tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
+                zlabel='Normalized L2 norm from matched points',
                 # interp=False,
                 interp_kwargs=dict(
                     # method='linear',
@@ -477,4 +508,18 @@ if __name__ == '__main__':
                 )
     # pick_cmap()
 
+    def grid_search_clustered():
+        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
 
+        # A good clustering result
+        lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
+        fp.grid_search(
+            plot=True,
+            labels=lbs,
+            plot_kwargs=dict(
+                inverse=True,
+                # save=True,
+                tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
+                zlabel='Normalized L2 norm from matched points in best cluster'
+            ))
+    # grid_search_clustered()

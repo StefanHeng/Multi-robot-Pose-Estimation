@@ -17,6 +17,12 @@ config = {
             length=unit_converter(41),  # In meters
             width=unit_converter(25)
         )
+    ),
+    'heuristics': dict(
+        pose_guess=dict(  # (translation_x, translation_y, rotation angle)
+            good_no_rotation=[2.5, -0.5],
+            actual_pose=[2.5, -0.75, -0.15]
+        )
     )
 }
 

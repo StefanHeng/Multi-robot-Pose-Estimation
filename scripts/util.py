@@ -9,8 +9,7 @@ from collections.abc import Iterable
 import numpy as np
 import scipy.interpolate
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Ellipse, Circle
-import mpl_toolkits.mplot3d.art3d as art3d
+from matplotlib.patches import Rectangle, Ellipse
 from matplotlib import transforms, rcParams
 from matplotlib.widgets import Button
 import seaborn as sns
@@ -20,7 +19,12 @@ from icecream import ic
 from scripts.data_path import *
 
 rcParams['figure.constrained_layout.use'] = True
-rcParams["figure.dpi"] = 300
+rcParams["figure.dpi"] = 100
+# font = {'family' : 'normal',
+#         'weight' : 'bold',
+#         'size'   : 22}
+rcParams['font.size'] = 12
+# matplotlib.rc('font', **font)
 sns.set_style('darkgrid')
 
 
@@ -403,8 +407,9 @@ def plot_icp_result(
         np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1])
     )
     ratio = 1 / x_rang * y_rang
-    d = 12 * scl
+    d = 8 * scl
     plt.figure(figsize=(d, d * ratio), constrained_layout=True)
+    # ic((d, d * ratio))
     plt.xlabel('Target space dim 1 (m)')
     plt.ylabel('Target space dim 2 (m)')
     t = 'ICP results'
@@ -456,8 +461,9 @@ def plot_icp_result(
         for i in zip(unit_sqr, unit_sqr_tsf):
             plot_line_seg(*i, with_arrow=with_arrow, marker=None, c=c, alpha=0.5)
 
-        handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
-        by_label = dict(zip(labels, handles))
+        handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
+        by_label = dict(zip(labels_, handles))
+        # by_label = dict(zip(*plt.gca().get_legend_handles_labels()))
         plt.legend(by_label.values(), by_label.keys())
 
         save_fig(save, t_)
@@ -609,7 +615,8 @@ def plot_grid_search(
     """
     errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
     errs_best_ang = errs_best_ang.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
-    fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
+    d = 12
+    fig, ax = plt.subplots(figsize=(d, d), subplot_kw=dict(projection='3d'))
     [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_best_ang  # Negated cos lower error = better
 
     if inverse:
@@ -665,7 +672,7 @@ def plot_grid_search(
         rect[:, :2] = apply_tsf_2d(rect, tsf_ideal)
         plot_points3d(rect, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
 
-    fig.colorbar(surf, shrink=0.5, aspect=2 ** 5)
+    fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**-4)
     plt.xlabel('Translation in X (m)')
     plt.ylabel('Translation in y (m)')
     ax.set_zlabel(zlabel)
@@ -674,6 +681,7 @@ def plot_grid_search(
     if title:
         t = f'{t}, {title}'
     plt.title(t)
+    # fig.suptitle(t)
     save_fig(save, t)
     plt.show()
 

@@ -11,5 +11,18 @@
             "length": 1.0413999999999999,
             "width": 0.635
         }
+    },
+    "heuristics": {
+        "pose_guess": {
+            "good_no_rotation": [
+                2.5,
+                -0.5
+            ],
+            "actual_pose": [
+                2.5,
+                -0.75,
+                -0.15
+            ]
+        }
     }
 }
