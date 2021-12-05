@@ -20,6 +20,7 @@ from icecream import ic
 from scripts.data_path import *
 
 rcParams['figure.constrained_layout.use'] = True
+rcParams["figure.dpi"] = 300
 sns.set_style('darkgrid')
 
 
@@ -614,8 +615,6 @@ def plot_grid_search(
     if inverse:
         Z = -Z
 
-    # if interp_kwargs is None:
-    #     interp_kwargs = dict()
     interp_kwargs = dict(
         factor=2**3
     ) | (dict() if interp_kwargs is None else interp_kwargs)
@@ -623,29 +622,20 @@ def plot_grid_search(
         X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, **interp_kwargs)
 
     bot, top = get_offset(Z, frac=offset_frac)  # Level/Height of contour plot & 2d point plots, respectively
-
     if plot3d_kwargs is None:
         plot3d_kwargs = dict()
-    ord_3d = 1
-    ord_2d = 20
+    ord_3d, ord_2d = 1, 20
     kwargs_surf = dict(
         zorder=ord_3d, antialiased=True,
         alpha=0.9, cmap='Spectral_r', edgecolor='black', lw=0.3
-        # label='Loss'
     ) | plot3d_kwargs
     kwargs_cont = dict(
         zorder=ord_3d, antialiased=True,
         linewidths=1, levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=bot, zdir='z',
         cmap='Spectral_r'
     ) | plot3d_kwargs
-    surf = ax.plot_surface(
-        X, Y, Z,
-        **kwargs_surf
-    )
-    ax.contour(
-        X, Y, Z,
-        **kwargs_cont
-    )
+    surf = ax.plot_surface(X, Y, Z, **kwargs_surf)
+    ax.contour(X, Y, Z, **kwargs_cont)
 
     cp = sns.color_palette(palette='husl', n_colors=7)
     cp = list(reversed(cp)) if inverse else cp
@@ -656,32 +646,24 @@ def plot_grid_search(
     c = next(cs)
     plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
     if tsf_ideal is not None:  # Illustrate the ideal translation
-        # prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
         plot_points(
-            # prc_moved,
             apply_tsf_2d(pcr, tsf_ideal),
             zorder=ord_2d, zs=top, c=c, alpha=0.7,
             label='Point cloud representation at actual pose'
         )
 
-        bot_, top_ = get_offset(Z, frac=offset_frac/1.25)
+        bot, top = get_offset(Z, frac=offset_frac/1.25)
         wd = pts2max_dist(pcr)/2
 
         rect = np.array([  # A rectangle, to indicate translation
-            [-wd/2, 0, bot_],
-            [wd/2, 0, bot_],
-            [wd/2, 0, top_],
-            [-wd/2, 0, top_],
-            [-wd / 2, 0, bot_]
+            [-wd/2, 0, bot],
+            [wd/2, 0, bot],
+            [wd/2, 0, top],
+            [-wd/2, 0, top],
+            [-wd / 2, 0, bot]
         ])
         rect[:, :2] = apply_tsf_2d(rect, tsf_ideal)
         plot_points3d(rect, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
-        # ax.plot(indic, zorder=ord_2d)
-
-        # pch = Rectangle((-wd/2, bot_), width=wd, height=top_-bot_, fc='black', zorder=15)
-        # pch._path2d = pch.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
-        # art3d.pathpatch_2d_to_3d(pch, z=0, zdir='y')
-        # ax.add_patch(pch)
 
     fig.colorbar(surf, shrink=0.5, aspect=2 ** 5)
     plt.xlabel('Translation in X (m)')

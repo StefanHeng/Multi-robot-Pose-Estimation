@@ -95,6 +95,54 @@ def extend_1s(arr):  # The jupyter notebook `explore_fuse_pose` seems to require
     return np.hstack([arr, np.ones([arr.shape[0], 1])])
 
 
+class Loss:
+    """
+    Various metrics to compute the fitness of two point clouds
+    """
+    class NearestNeighbor:
+        """
+        Given a list of 2D query points, return the corresponding target points matched
+        """
+        def __init__(self, tgt):
+            self.tgt = extend_1s(tgt)
+            self.tree_tgt = KDTree(tgt)
+
+        def __call__(self, src):
+            """
+            Finds nearest neighbors in the target
+            """
+            dist, idxs_ = self.tree_tgt.query(src[:, :2])
+            # Keep pairs with distinct target points by removing pairs with larger distance
+            idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
+            arg_idxs = dist.argsort()
+            idxs_pair_sort = idxs_pair[arg_idxs]
+            idxs_sort = idxs_[arg_idxs]
+
+            def arr_idx(a, v):
+                """
+                :return: 1st occurrence index of `v` in `a`, a numpy 1D array
+                """
+                return np.where(a == v)[0][0]
+
+            def _get_idx(arr):
+                def _get(i):
+                    """
+                    If arr[i] is not the first occurrence, it's set to -1
+                    """
+                    i_ = arr_idx(arr, arr[i])
+                    return arr[i] if i_ == i else -1
+
+                return _get
+
+            idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
+            idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+            return (
+                src[idxs_pair_uniq[:, 0]][:, :2],
+                self.tgt[idxs_pair_uniq[:, 1]][:, :2],
+                idxs_pair_uniq
+            )
+
+
 class Icp:
     """
     Implementation of ICP algorithm in 2D
@@ -108,9 +156,11 @@ class Icp:
         :param src:  Array of source points
         :param tgt: Array of target points
         """
+        self.nn = Loss.NearestNeighbor(tgt)
+        # Should stay unchanged across program duration
         self.src = extend_1s(src)
-        self.tgt = extend_1s(tgt)
-        self.tree_tgt = KDTree(tgt)
+        # self.tgt = extend_1s(tgt)
+        self.tgt = self.nn.tgt  # Save memory
 
     def pose_error(self, tsf):
         """
@@ -119,11 +169,8 @@ class Icp:
         :return: The error based on closest pair of matched points
         """
         def _pose_error(tsf_):
-            src_match, tgt_match, idxs = self.nn_tgt((self.src @ tsl_n_angle2tsf(tsf_).T)[:, :2])
+            src_match, tgt_match, idxs = self.nn((self.src @ tsl_n_angle2tsf(tsf_).T)[:, :2])
             err = self.pts_match_error(src_match, tgt_match)
-            # err *= idxs.shape[0] / self.src.shape[0] * 2**4
-            # if err <= 0.5:
-            #     ic(err, tsf_, idxs.shape)
             return err
         if len(tsf.shape) == 2:
             return np.apply_along_axis(_pose_error, 1, tsf)
@@ -139,7 +186,6 @@ class Icp:
         pts1 = pts1[:, :2]
         pts2 = pts2[:, :2]
         n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
-        # ic(n.shape)
         # return n.sum() / (n.size**2)
         return n.mean()
 
@@ -160,7 +206,7 @@ class Icp:
         states = []
 
         while d_err > min_d_err and n < max_iter:
-            src_match, tgt_match, idxs = self.nn_tgt(src)
+            src_match, tgt_match, idxs = self.nn(src)
 
             def _err():
                 src_ = src[idxs[:, 0]]
@@ -177,41 +223,6 @@ class Icp:
             src = self.src @ tsf.T
             n += 1
         return (tsf, states) if verbose else tsf
-
-    def nn_tgt(self, src):
-        """
-        Finds nearest neighbors in the target
-        """
-        dist, idxs_ = self.tree_tgt.query(src[:, :2])
-        # Keep pairs with distinct target points by removing pairs with larger distance
-        idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
-        arg_idxs = dist.argsort()
-        idxs_pair_sort = idxs_pair[arg_idxs]
-        idxs_sort = idxs_[arg_idxs]
-
-        def arr_idx(a, v):
-            """
-            :return: 1st occurrence index of `v` in `a`, a numpy 1D array
-            """
-            return np.where(a == v)[0][0]
-
-        def _get_idx(arr):
-            def _get(i):
-                """
-                If arr[i] is not the first occurrence, it's set to -1
-                """
-                i_ = arr_idx(arr, arr[i])
-                return arr[i] if i_ == i else -1
-
-            return _get
-
-        idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
-        idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
-        return (
-            src[idxs_pair_uniq[:, 0]][:, :2],
-            self.tgt[idxs_pair_uniq[:, 1]][:, :2],
-            idxs_pair_uniq
-        )
 
     @staticmethod
     def svd(src, tgt):
@@ -230,11 +241,11 @@ class Icp:
         tgt_c = tgt - c_tgt
         M = tgt_c.T @ src_c
         U, W, V_t = np.linalg.svd(M)
-        rot_mat = U @ V_t
-        tsl = c_tgt - rot_mat @ c_src
+        rot_mat_ = U @ V_t
+        tsl = c_tgt - rot_mat_ @ c_src
         tsf = np.identity(3)
         tsf[:2, 2] = tsl
-        tsf[:2, :2] = rot_mat
+        tsf[:2, :2] = rot_mat_
         return tsf
 
 
@@ -280,9 +291,14 @@ class PoseEstimator:
             # ]))
             pass
 
-        def grid_search(self, plot=False, plot_kwargs=None):
+        def grid_search(self, precision=None, plot=False, plot_kwargs=None):
+            if precision is None:
+                # precision = dict(tsl=5e-1, angle=1 / 9)
+                precision = dict(tsl=1e0, angle=1 / 2)
+                # precision = dict(tsl=3e0, angle=1)
+
             # self._grid_search(self.pcr_a, self.pts_b)
-            ret = self._grid_search(self.pcr_b, self.pts_a)
+            ret = self._grid_search(self.pcr_b, self.pts_a, precision=precision)
             if plot:
                 plot_grid_search(self.pcr_b, self.pts_a, *ret, **plot_kwargs)
             return ret
@@ -301,10 +317,6 @@ class PoseEstimator:
             print(f'Grid-searching for pose estimates on...')
             print(f'   target of [{pts.shape[0]}] points, and')
             print(f'   source of [{pcr.shape[0]}] points...')
-            if precision is None:
-                # precision = dict(tsl=5e-1, angle=1 / 9)
-                # precision = dict(tsl=1e0, angle=1 / 2)
-                precision = dict(tsl=3e0, angle=1)
             # ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
@@ -354,7 +366,7 @@ if __name__ == '__main__':
     # icp_sanity_check()
 
     ptc_kuka = get_kuka_pointcloud()
-    pts = eg_hsr_scan()
+    pts_hsr = eg_hsr_scan()
 
     def check_icp_hsr():
         # Empirically have `robot_a` as HSR, `robot_b` as KUKA
@@ -367,27 +379,27 @@ if __name__ == '__main__':
             [0, 1, -0.5],
             [0, 0, 1]
         ])
-        visualize(ptc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
+        visualize(ptc_kuka, pts_hsr, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
     # check_icp_hsr()
 
     cls = Cluster.cluster
 
     def clustering_sanity_check():
         def sp():
-            lbs = cls(pts, approach='spectral', n_clusters=8)
-            plot_cluster(pts, lbs, title='Spectral on HSR', save=True)
+            lbs = cls(pts_hsr, approach='spectral', n_clusters=8)
+            plot_cluster(pts_hsr, lbs, title='Spectral on HSR', save=True)
 
         def hi(d):
-            lbs = cls(pts, approach='hierarchical', distance_threshold=d)
-            plot_cluster(pts, lbs, title=f'Hierarchical on HSR, avg threshold={d}', save=True)
+            lbs = cls(pts_hsr, approach='hierarchical', distance_threshold=d)
+            plot_cluster(pts_hsr, lbs, title=f'Hierarchical on HSR, avg threshold={d}', save=True)
 
         def ga():
-            lbs = cls(pts, approach='gaussian', n_components=6)
-            plot_cluster(pts, lbs, title='Gaussian Mixture on HSR', save=True)
+            lbs = cls(pts_hsr, approach='gaussian', n_components=6)
+            plot_cluster(pts_hsr, lbs, title='Gaussian Mixture on HSR', save=True)
 
         def db():
-            lbs = cls(pts, approach='dbscan', eps=0.5, min_samples=16)
-            plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
+            lbs = cls(pts_hsr, approach='dbscan', eps=0.5, min_samples=16)
+            plot_cluster(pts_hsr, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
 
         sp()
         hi(1)
@@ -399,8 +411,8 @@ if __name__ == '__main__':
     def icp_after_cluster():
         cls = Cluster.cluster
         # A good clustering result by empirical inspection
-        lbs = cls(pts, approach='hierarchical', distance_threshold=1)
-        d_clusters = {lb: pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
+        lbs = cls(pts_hsr, approach='hierarchical', distance_threshold=1)
+        d_clusters = {lb: pts_hsr[np.where(lbs == lb)] for lb in np.unique(lbs)}
 
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
 
@@ -420,8 +432,9 @@ if __name__ == '__main__':
     # icp_after_cluster()
 
     def grid_search():
-        fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
+        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
         fp.grid_search(
+            precision=dict(tsl=0.25, angle=1/20),
             plot=True,
             plot_kwargs=dict(
                 inverse=True,
@@ -452,7 +465,7 @@ if __name__ == '__main__':
             'twilight',
             'twilight_shifted'
         ]
-        fp = PoseEstimator.FusePose(pts_a=pts, pcr_b=ptc_kuka)
+        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
         ret = fp.grid_search()
         for cmap in cmaps:
             ic(cmap)
