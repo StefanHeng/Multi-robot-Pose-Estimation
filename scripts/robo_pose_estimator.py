@@ -426,6 +426,7 @@ if __name__ == '__main__':
             plot_kwargs=dict(
                 inverse=True,
                 # save=True,
+                tsf_ideal=tsl_n_angle2tsf([2.5, -0.75], -0.15),
                 zlabel='Matched points normalized L2 norm',
                 # interp=False,
                 interp_kwargs=dict(

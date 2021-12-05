@@ -94,7 +94,7 @@ def clipper(low, high):
 
 def get_3rd_side(a, b):
     """
-    Returns hypotenuse of a right-angled triangle, given it's other sides
+    Returns hypotenuse of a right-angled triangle, given its other sides
     """
     # return np.sqrt(np.sum(np.square(mags)))
     return sqrt(a**2 + b**2)
@@ -313,12 +313,58 @@ def plot_points(arr, **kwargs):
     """
     arr = np.asarray(arr)
     kwargs_ = dict(
+        marker='.', lw=0.5, ms=1,
         c='orange',
-        marker='.',
-        ms=1,
-        lw=0.5,
     )
     plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
+
+
+def plot_points3d(arr, **kwargs):
+    """
+    :param arr: Array of 3d points to plot
+    :param kwargs: Arguments are forwarded to `matplotlib.axes.Axes.plot`
+    """
+    arr = np.asarray(arr)
+    kwargs_ = dict(
+        marker='.', lw=0.5, ms=1,
+        c='orange',
+    )
+    plt.plot(arr[:, 0], arr[:, 1], arr[:, 2], **(kwargs_ | kwargs))
+
+
+def plot_line_seg(c1, c2, with_arrow=True, **kwargs):
+    kwargs_ = dict(
+        ls='dotted', marker='o', lw=1, ms=2,
+        c='orange',
+    )
+    kwargs = kwargs_ | kwargs
+    plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **kwargs)
+    if with_arrow:
+        plot_line_seg_arrow(c1, c2, color=get(kwargs, 'c'), alpha=get(kwargs, 'alpha'))
+
+
+def plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
+    coords = np.array([c1, c2])
+    mean = coords.mean(axis=0)
+    mags = (coords[1] - coords[0]) * r
+
+    width = 5 * get_3rd_side(*mags)
+    if not hasattr(plot_icp_result, 'clp'):
+        plot_icp_result.clp = clipper(0.01, 0.05)
+    width = plot_icp_result.clp(width)
+
+    kwargs_ = dict(
+        alpha=0.5,
+        # head_width=0.05,
+        head_width=width,
+        length_includes_head=True,
+        lw=0,
+        overhang=0.2,
+    )
+    plt.arrow(
+        *(mean-mags/2), *mags,
+        **(kwargs_ | kwargs)
+    )
 
 
 def plot_icp_result(
@@ -342,46 +388,11 @@ def plot_icp_result(
 
     .. note:: Assumes 2d data
     """
-    def _plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
-        coords = np.array([c1, c2])
-        mean = coords.mean(axis=0)
-        mags = (coords[1] - coords[0]) * r
-
-        width = 5 * get_3rd_side(*mags)
-        if not hasattr(plot_icp_result, 'clp'):
-            plot_icp_result.clp = clipper(0.01, 0.05)
-        width = plot_icp_result.clp(width)
-
-        kwargs_ = dict(
-            alpha=0.5,
-            # head_width=0.05,
-            head_width=width,
-            length_includes_head=True,
-            lw=0,
-            overhang=0.2,
-        )
-        plt.arrow(
-            *(mean-mags/2), *mags,
-            **(kwargs_ | kwargs)
-        )
-
-    def _plot_line_seg(c1, c2, **kwargs):
-        kwargs_ = dict(
-            marker='o',
-            c='orange',
-            ms=2,
-            lw=1,
-            ls='dotted'
-        )
-        kwargs = kwargs_ | kwargs
-        plt.plot((c1[0], c2[0]), (c1[1], c2[1]), **kwargs)
-        if with_arrow:
-            _plot_line_seg_arrow(c1, c2, color=get(kwargs, 'c'), alpha=get(kwargs, 'alpha'))
 
     def _plot_matched_points(stt, **kwargs):
         src__, tgt__ = stt[0], stt[1]
         for s_, t_ in zip(src__, tgt__):
-            _plot_line_seg(s_, t_, **kwargs)
+            plot_line_seg(s_, t_, with_arrow=with_arrow, **kwargs)
 
     N_STT = len(states)
 
@@ -442,7 +453,7 @@ def plot_icp_result(
         plot_points(unit_sqr, ms=0, marker=None, c=c, alpha=0.6, label='Unit square')
         plot_points(unit_sqr_tsf, ms=0.5, marker=None, c=c, alpha=0.9, label='Unit square, transformed')
         for i in zip(unit_sqr, unit_sqr_tsf):
-            _plot_line_seg(*i, marker=None, c=c, alpha=0.5)
+            plot_line_seg(*i, with_arrow=with_arrow, marker=None, c=c, alpha=0.5)
 
         handles, labels = plt.gca().get_legend_handles_labels()  # Distinct labels
         by_label = dict(zip(labels, handles))
@@ -586,6 +597,7 @@ def plot_grid_search(
         pcr, pts, opns_x, opns_y, opns_ang, errs,
         interp=True, inverse=False,
         title=None, save=False, zlabel='Loss', offset_frac=2**3,
+        tsf_ideal=None,
         interp_kwargs=None,
         plot3d_kwargs=None
 ):
@@ -639,36 +651,37 @@ def plot_grid_search(
     cp = list(reversed(cp)) if inverse else cp
     cs = iter(cp)
 
-    # Illustrate the ideal translation4
-    bot_, top_ = get_offset(Z, frac=offset_frac/1.25)
-    ic(top_, bot_, top_-bot_)
-    wd = pts2max_dist(pcr)/2
-    pch = Rectangle((-wd/2, bot_), width=wd, height=top_-bot_, fc=cp[-1], zorder=2)
-    ax.add_patch(pch)
-    pch._path2d = pch.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
-    art3d.pathpatch_2d_to_3d(pch, z=0, zdir='y')
-    # p = Circle((5, 5), 3)
-    # ax.add_patch(p)
-    # art3d.pathpatch_2d_to_3d(p, z=0, zdir="x")
-    # from matplotlib.patches import Circle, PathPatch
-    # from matplotlib.text import TextPath
-    # from matplotlib.transforms import Affine2D
-    # p = Circle((5, 5), 3)
-    # ic(p.get_path())
-    # ax.add_patch(p)
-    # p._path2d = p.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
-    # art3d.pathpatch_2d_to_3d(p, z=0, zdir="x")
-
     plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10)
     plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label='Laser scan, target')
     c = next(cs)
     plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
-    prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
-    plot_points(
-        prc_moved,
-        zorder=ord_2d, zs=top, c=c, alpha=0.7,
-        label='Point cloud representation at actual pose'
-    )
+    if tsf_ideal is not None:  # Illustrate the ideal translation
+        # prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
+        plot_points(
+            # prc_moved,
+            apply_tsf_2d(pcr, tsf_ideal),
+            zorder=ord_2d, zs=top, c=c, alpha=0.7,
+            label='Point cloud representation at actual pose'
+        )
+
+        bot_, top_ = get_offset(Z, frac=offset_frac/1.25)
+        wd = pts2max_dist(pcr)/2
+
+        rect = np.array([  # A rectangle, to indicate translation
+            [-wd/2, 0, bot_],
+            [wd/2, 0, bot_],
+            [wd/2, 0, top_],
+            [-wd/2, 0, top_],
+            [-wd / 2, 0, bot_]
+        ])
+        rect[:, :2] = apply_tsf_2d(rect, tsf_ideal)
+        plot_points3d(rect, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
+        # ax.plot(indic, zorder=ord_2d)
+
+        # pch = Rectangle((-wd/2, bot_), width=wd, height=top_-bot_, fc='black', zorder=15)
+        # pch._path2d = pch.get_path()  # Missing attribute - seems to be a bug on `matplotlib`
+        # art3d.pathpatch_2d_to_3d(pch, z=0, zdir='y')
+        # ax.add_patch(pch)
 
     fig.colorbar(surf, shrink=0.5, aspect=2 ** 5)
     plt.xlabel('Translation in X (m)')
