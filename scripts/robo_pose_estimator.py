@@ -324,6 +324,8 @@ class PoseEstimator:
             [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_max  # Negated cos lower error = better
             if interpolate:
                 X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, factor=2**3)
+            ord_3d = 1
+            ord_2d = 100
             surf = ax.plot_surface(
                 X, Y, Z,
                 # cmap='mako_r',
@@ -343,24 +345,30 @@ class PoseEstimator:
                 rcount=2**10, ccount=2**10,
                 edgecolor='none', antialiased=False,
                 label='Loss',
+                alpha=0.75,
+                zorder=ord_3d
             )
-            # offset =
-            # min_ = max_ - ran_ / (2**5)
-            # levels = np.linspace(min_, max_, num=2**4)
-            # ic(levels) pad=2**(-5))
             ax.contour(
                 X, Y, Z,
                 levels=np.linspace(Z.min(), Z.max(), 2**4), offset=Z.min() - (Z.max() - Z.min()) / (2**4), zdir='z',
                 cmap='Spectral_r',
+                linewidths=1,
+                zorder=ord_3d,
             )
 
-            cs = iter(reversed(sns.color_palette(palette='husl', n_colors=7)))
+            cs = iter(sns.color_palette(palette='husl', n_colors=7))
             lvl = 7  # Level/Height of 2d point plots
-            plot_points(pts, zs=lvl, c=next(cs), label='Laser scan, target')
+            # ax.plot(xs=pts[:, 0], ys=pts[:, 1], zs=lvl, c=next(cs), label='Laser scan, target', zorder=ord_2d)
+            plot_points([[0, 0]], zs=lvl, zorder=100, ms=10)
+            plot_points(pts, zorder=ord_2d, zs=lvl, c=next(cs), label='Laser scan, target')
             c = next(cs)
-            plot_points(pcr, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
+            plot_points(pcr, zorder=ord_2d, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
             prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
-            plot_points(prc_moved, zs=lvl, c=c, alpha=0.7, label='Point cloud representation at actual pose')
+            plot_points(
+                prc_moved,
+                zorder=ord_2d, zs=lvl, c=c, alpha=0.7,
+                label='Point cloud representation at actual pose'
+            )
 
             fig.colorbar(surf, shrink=0.5, aspect=2**5)
             plt.xlabel('x')

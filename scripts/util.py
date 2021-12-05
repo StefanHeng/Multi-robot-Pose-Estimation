@@ -298,6 +298,7 @@ def plot_points(arr, **kwargs):
     :param arr: Array of 2d points to plot
     :param kwargs: Arguments are forwarded to `matplotlib.axes.Axes.plot`
     """
+    arr = np.asarray(arr)
     kwargs_ = dict(
         c='orange',
         marker='.',
