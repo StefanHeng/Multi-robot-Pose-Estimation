@@ -296,8 +296,8 @@ class PoseEstimator:
             print(f'Searching by grid for pose estimates on target laser scan with [{pts.shape[0]}] points, with ...')
             if precision is None:
                 # precision = dict(tsl=5e-1, angle=1 / 9)
-                precision = dict(tsl=1e0, angle=1 / 2)
-                # precision = dict(tsl=3e0, angle=1)
+                # precision = dict(tsl=1e0, angle=1 / 2)
+                precision = dict(tsl=3e0, angle=1)
             # ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
@@ -326,35 +326,59 @@ class PoseEstimator:
             fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
             [X, Y], Z = np.meshgrid(opns_x, opns_y), -errs_max  # Negated cos lower error = better
 
-            def scale(arr, factor=4):
+            def scale(arr, factor=4, as_sz=False):
                 """
                 :param arr: 1D array of uniform values
                 :param factor: Factor to sample
+                :param as_sz: If true, return the size of scaled aray
                 :return: 1D array of `arr` with a finer sample,
                     in particular, the distance between two adjacent points is `factor` times smaller
                 """
-                return np.linspace(arr[0], arr[-1], num=(arr.size-1) * factor + 1)
+                num = (arr.size-1) * factor + 1
+                return num if as_sz else np.linspace(arr[0], arr[-1], num=num)
             ic(opns_x.shape, scale(opns_x).shape)
             ic(X, Y, Z)
 
-            # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
+            # # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
+            # # X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
+            # # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
+            # n_x, n_y = scale(opns_x).size, scale(opns_y).size
+            # Y_, X_ = np.meshgrid(np.linspace(-1, 1, num=n_x), np.linspace(-1, 1, num=n_y))  # reversed
+            # ic(X_, Y_)
+            # tck = interpolate.bisplrep(X, Y, Z, s=0)
+            # ic(tck)
+            # Z_ = interpolate.bisplev(X_[:, 0], Y_[0, :], tck)
+            # ic(type(Z_), Z_)
+            # ic(X_.shape, Y_.shape, Z_.shape)
             # X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
-            # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
-            n_x, n_y = scale(opns_x).size, scale(opns_y).size
-            Y_, X_ = np.meshgrid(np.linspace(-1, 1, num=n_x), np.linspace(-1, 1, num=n_y))  # reversed
-            ic(X_, Y_)
-            tck = interpolate.bisplrep(X, Y, Z, s=0)
-            ic(tck)
-            Z_ = interpolate.bisplev(X_[:, 0], Y_[0, :], tck)
-            ic(type(Z_), Z_)
-            ic(X_.shape, Y_.shape, Z_.shape)
+            # # exit(1)
 
-            X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
-            # exit(1)
+            X_f = X.flatten()
+            Y_f = Y.flatten()
+            Z_f = Z.flatten()
+            # xi = np.linspace(X_.min(), X_.max(), num=10)
+            # yi = np.linspace(Y_.min(), Y_.max(), num=10)
+            # ic(xi, yi)
+            # xi = np.linspace(-1, 1, num=n+1)
+            # yi = np.linspace(-1, 1, num=n+1)
+            # ic(X.shape, Y.shape, xi.shape, yi.shape, Z_.shape)
+            # scale(opns_x)
+            # Z_ = interpolate.griddata((X_f, Y_f), Z_f, (opns_x[:, None], opns_y[:, None]), method='linear')
+            # n = int((scale(opns_x, as_sz=True) + scale(opns_y, as_sz=True)) / 2)
+            # ic(n)
+            # x_inter = np.linspace(opns_x[0], opns_x[-1], num=n).reshape(1, -1)
+            # y_inter = np.linspace(opns_y[0], opns_y[-1], num=n).reshape(1, -1)
+            # ic(X_f.shape, Y_f.shape, Z_f.shape, x_inter.shape, y_inter.shape)
+            # `interpolate.griddata` requires interpolation points of the same length across all dimensions
+            x_inter = scale(opns_x).reshape(1, -1)
+            y_inter = scale(opns_y).reshape(-1, 1)
+            Z_ = interpolate.griddata((X_f, Y_f), Z_f, (x_inter, y_inter), method='cubic')
+            X_, Y_ = np.meshgrid(x_inter, y_inter)
+            ic(Z_.shape)
 
             surf = ax.plot_surface(  # Or, `contourf`
-                X, Y, Z,
-                # X_, Y_, Z_,
+                # X, Y, Z,
+                X_, Y_, Z_,
                 # cmap='mako_r',
                 # cmap='CMRmap',
                 # cmap='RdYlBu',
