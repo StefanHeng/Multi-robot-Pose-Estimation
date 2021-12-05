@@ -3,6 +3,8 @@ import json
 import os.path
 from math import pi, acos, degrees, sqrt
 from functools import reduce
+from typing import Union
+from collections.abc import Iterable
 
 import numpy as np
 import scipy.interpolate
@@ -207,7 +209,7 @@ def rot_mat(theta):
     ])
 
 
-def tsl_n_angle2tsf(tsl=np.array([0, 0]), theta=0):
+def tsl_n_angle2tsf(tsl: Iterable = np.array([0, 0]), theta: Union[int, float] = 0):
     """
     Converts translation in 2D & an angle into matrix transformation
 
@@ -308,8 +310,11 @@ def plot_points(arr, **kwargs):
     plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
 
 
-def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
-                    init_tsf=np.identity(3), mode='static', scale=1):
+def plot_icp_result(
+        src, tgt, tsf,
+        title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
+        init_tsf=np.identity(3), mode='static', scl=1
+):
     """
     :param src: Source coordinates
     :param tgt: Target coordinates
@@ -319,9 +324,10 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
     :param states: A list of source-target matched points & transformation for each iteration
     :param xlim: X limit for plot, inferred if not given
     :param ylim: Y limit for plot, inferred if not given
+    :param with_arrow: If true, matched points are shown with arrows
     :param init_tsf: Initial transformation guess for ICP
     :param mode: Plotting mode, one of [`static`, `animate`, `control`]
-    :param scale: Plot window scale
+    :param scl: Plot window scale
 
     .. note:: Assumes 2d data
     """
@@ -374,7 +380,7 @@ def plot_icp_result(src, tgt, tsf, title=None, save=False, states=None, xlim=Non
         np.ptp(tgt[:, 0]), np.ptp(tgt[:, 1])
     )
     ratio = 1 / x_rang * y_rang
-    d = 12 * scale
+    d = 12 * scl
     plt.figure(figsize=(d, d * ratio), constrained_layout=True)
     plt.xlabel('Target space dim 1 (m)')
     plt.ylabel('Target space dim 2 (m)')
@@ -551,6 +557,78 @@ def interpolate(X, Y, Z, x_coords, y_coords, factor=4, method='cubic'):
     X_, Y_ = np.meshgrid(x_inter, y_inter)
     Z_ = scipy.interpolate.griddata((X_f, Y_f), Z_f, (x_inter, y_inter), method=method)
     return X_, Y_, Z_
+
+
+def plot_grid_search(pcr, pts, opns_x, opns_y, opns_ang, errs, interp=True, factor=2**3):
+    """
+    Plot grid search result per `PoseEstimator.FusePose`
+
+    Plots loss against translation, for each setup, the angle with the lowest loss is picked
+    """
+    # For each translation (x, y pair), pick the rotation with the lowest error
+    errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
+    errs_best_ang = errs_best_ang.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
+
+    fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
+    [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_best_ang  # Negated cos lower error = better
+    if interp:
+        X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, factor=factor)
+    ord_3d = 1
+    ord_2d = 100
+    surf = ax.plot_surface(
+        X, Y, Z,
+        # cmap='mako_r',
+        # cmap='CMRmap',
+        # cmap='RdYlBu',
+        # cmap='Spectral',
+        cmap='Spectral_r',
+        # cmap='bone',
+        # cmap='gnuplot',
+        # cmap='gnuplot2',
+        # cmap='icefire',
+        # cmap='rainbow',
+        # cmap='rocket',
+        # cmap='terrain_r',
+        # cmap='twilight',
+        # cmap='twilight_shifted',
+        # rcount=2 ** 10, ccount=2 ** 10,
+        edgecolor='none',
+        antialiased=False,
+        label='Loss',
+        alpha=0.75,
+        zorder=ord_3d
+    )
+    ax.contour(
+        X, Y, Z,
+        levels=np.linspace(Z.min(), Z.max(), 2 ** 4), offset=Z.min() - (Z.max() - Z.min()) / (2 ** 4), zdir='z',
+        cmap='Spectral_r',
+        linewidths=1,
+        zorder=ord_3d,
+    )
+
+    cs = iter(sns.color_palette(palette='husl', n_colors=7))
+    lvl = 7  # Level/Height of 2d point plots
+    # ax.plot(xs=pts[:, 0], ys=pts[:, 1], zs=lvl, c=next(cs), label='Laser scan, target', zorder=ord_2d)
+    plot_points([[0, 0]], zs=lvl, zorder=100, ms=10)
+    plot_points(pts, zorder=ord_2d, zs=lvl, c=next(cs), label='Laser scan, target')
+    c = next(cs)
+    plot_points(pcr, zorder=ord_2d, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
+    prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
+    plot_points(
+        prc_moved,
+        zorder=ord_2d, zs=lvl, c=c, alpha=0.7,
+        label='Point cloud representation at actual pose'
+    )
+
+    fig.colorbar(surf, shrink=0.5, aspect=2 ** 5)
+    plt.xlabel('x')
+    plt.ylabel('y')
+    ax.set_zlabel('Loss')
+    surf._facecolors2d = surf._facecolor3d
+    surf._edgecolors2d = surf._edgecolor3d
+    plt.legend()
+    plt.title('Grid search, loss against translation, best angle picked')
+    plt.show()
 
 
 if __name__ == '__main__':
