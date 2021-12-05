@@ -214,6 +214,7 @@ def tsl_n_angle2tsf(tsl=np.array([0, 0]), theta=0):
         or 2-array of (translation_x, translation_y)
     :param theta: Angle in radians
     """
+    tsl = np.asarray(tsl)
     tsf = np.identity(3)
     tsf[:2, 2] = tsl[:2]
     # ic(tsl[-1] if tsl.size == 3 else theta)

@@ -292,53 +292,197 @@ if __name__ == '__main__':
     # ic(X.shape, Y.shape)
     # ic(X, Y)
 
-    # https://stackoverflow.com/questions/55531760/is-there-a-way-to-label-multiple-3d-surfaces-in-matplotlib/55534939
-    import numpy as np
-    import matplotlib.pyplot as plt
-    fig = plt.figure()
-    ax = plt.axes(projection='3d')
-
-    plt.rcParams['legend.fontsize'] = 10
-
-    # First constraint
-    g2 = np.linspace(-5, 5, 2)
-    g3 = np.linspace(-5, 5, 2)
-    G2, G3 = np.meshgrid(g2, g3)
-    G4_1 = -1.18301270189222 - 0.5 * G2 + 0.5 * G3
-    ax = fig.gca(projection='3d')
-    c1 = ax.plot_surface(G2, G3, G4_1, label="c1")
-    c1._facecolors2d = c1._facecolor3d
-    c1._edgecolors2d = c1._edgecolor3d
-
-    # # Second
-    # G3, G4 = np.meshgrid(g2, g3)
-    # G2 = G3
-    # c2 = ax.plot_surface(G2, G3, G4, label="c2")
-    # c2._facecolors2d = c2._facecolors3d
-    # c2._edgecolors2d = c2._edgecolors3d
+    # # https://stackoverflow.com/questions/55531760/is-there-a-way-to-label-multiple-3d-surfaces-in-matplotlib/55534939
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+    # fig = plt.figure()
+    # ax = plt.axes(projection='3d')
     #
-    # # Third
+    # plt.rcParams['legend.fontsize'] = 10
+    #
+    # # First constraint
+    # g2 = np.linspace(-5, 5, 2)
+    # g3 = np.linspace(-5, 5, 2)
     # G2, G3 = np.meshgrid(g2, g3)
-    # G4 = (0.408248290463863 * G2 + 0.408248290463863 * G3 - 0.707106781186548) / 1.63299316185545
-    # c3 = ax.plot_surface(G2, G3, G4, label="c3")
-    # c3._facecolors2d = c3._facecolors3d
-    # c3._edgecolors2d = c3._edgecolors3d
+    # G4_1 = -1.18301270189222 - 0.5 * G2 + 0.5 * G3
+    # ax = fig.gca(projection='3d')
+    # c1 = ax.plot_surface(G2, G3, G4_1, label="c1")
+    # c1._facecolors2d = c1._facecolor3d
+    # c1._edgecolors2d = c1._edgecolor3d
     #
-    # # And forth
-    # G4 = (1.04903810567666 - (0.288675134594813 * G2 + 0.288675134594813 * G3)) / 0.577350269189626
-    # c4 = ax.plot_surface(G2, G3, G4, label="c4")
+    # # # Second
+    # # G3, G4 = np.meshgrid(g2, g3)
+    # # G2 = G3
+    # # c2 = ax.plot_surface(G2, G3, G4, label="c2")
+    # # c2._facecolors2d = c2._facecolors3d
+    # # c2._edgecolors2d = c2._edgecolors3d
+    # #
+    # # # Third
+    # # G2, G3 = np.meshgrid(g2, g3)
+    # # G4 = (0.408248290463863 * G2 + 0.408248290463863 * G3 - 0.707106781186548) / 1.63299316185545
+    # # c3 = ax.plot_surface(G2, G3, G4, label="c3")
+    # # c3._facecolors2d = c3._facecolors3d
+    # # c3._edgecolors2d = c3._edgecolors3d
+    # #
+    # # # And forth
+    # # G4 = (1.04903810567666 - (0.288675134594813 * G2 + 0.288675134594813 * G3)) / 0.577350269189626
+    # # c4 = ax.plot_surface(G2, G3, G4, label="c4")
+    # #
+    # # c4._facecolors2d = c4._facecolors3d
+    # # c4._edgecolors2d = c4._edgecolors3d
     #
-    # c4._facecolors2d = c4._facecolors3d
-    # c4._edgecolors2d = c4._edgecolors3d
+    # ax.legend()  # -> error : 'AttributeError: 'Poly3DCollection' object has no attribute '_edgecolors2d''
+    #
+    # # labeling the figure
+    # fig.suptitle("Constraints")
+    # # plt.xlabel('g2', fontsize=14)
+    # # plt.ylabel('g3', fontsize=14)
+    # ax.set_xlabel(r'$g_2$', fontsize=15, rotation=60)
+    # ax.set_ylabel('$g_3$', fontsize=15, rotation=60)
+    # ax.set_zlabel('$g_4$', fontsize=15, rotation=60)
+    # plt.show()
 
-    ax.legend()  # -> error : 'AttributeError: 'Poly3DCollection' object has no attribute '_edgecolors2d''
+    # Smooth 3D plot https://stackoverflow.com/questions/35157650/smooth-surface-plot-with-pyplot
+    import numpy as np
+    from scipy import interpolate
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import axes3d, Axes3D
 
-    # labeling the figure
-    fig.suptitle("Constraints")
-    # plt.xlabel('g2', fontsize=14)
-    # plt.ylabel('g3', fontsize=14)
-    ax.set_xlabel(r'$g_2$', fontsize=15, rotation=60)
-    ax.set_ylabel('$g_3$', fontsize=15, rotation=60)
-    ax.set_zlabel('$g_4$', fontsize=15, rotation=60)
+    X, Y = np.mgrid[-1:1:20j, -1:1:20j]
+    Z = (X + Y) * np.exp(-6.0 * (X * X + Y * Y)) + np.random.rand(X.shape[0])
+    X = np.array([[-4., -0.75, 2.5, 5.75, 9.],
+                   [-4., -0.75, 2.5, 5.75, 9.],
+                   [-4., -0.75, 2.5, 5.75, 9.],
+                   [-4., -0.75, 2.5, 5.75, 9.],
+                   [-4., -0.75, 2.5, 5.75, 9.]])
+    Y = np.array([[-3., -3., -3., -3., -3.],
+              [0.5, 0.5, 0.5, 0.5, 0.5],
+              [4., 4., 4., 4., 4.],
+              [7.5, 7.5, 7.5, 7.5, 7.5],
+              [11., 11., 11., 11., 11.]])
+    Z = np.array([[-2.82540909, -3.00641217, -1.73795643, -3.14751604, -3.72014602],
+              [-1.01205317, -0.10801578, -0.25385137, -0.50081401, -1.46194579],
+              [-1.00205789, -0.23398504, -0.17424708, -0.97058985, -2.33291644],
+              [-2.08968439, -0.81389158, -2.41424369, -1.2806653, -3.97050193],
+              [-2.37117982, -1.38764977, -3.55121739, -4.35633471, -5.9975255]])
+
+    xnew, ynew = np.mgrid[-1:1:80j, -1:1:80j]
+    ic(xnew, ynew)
+    n = 81
+    # y_, x_ = np.meshgrid(np.linspace(-1, 1, num=n+1), np.linspace(-1, 1, num=n+1))  # Inversed
+    # ic(y_, x_)
+    # assert ynew == y_
+    # assert xnew == x_
+    # ynew, xnew = np.meshgrid(np.linspace(-1, 1, num=17), np.linspace(-1, 1, num=17))  # Inversed
+    # ic(xnew, ynew)
+    # xnew, ynew = x_, y_
+    # tck = interpolate.bisplrep(X, Y, Z, s=30)
+    # znew = interpolate.bisplev(xnew[:, 0], ynew[0, :], tck)
+
+    # Here
+    X_ = X.flatten()
+    Y_ = Y.flatten()
+    Z_ = Z.flatten()
+    xi = np.linspace(X_.min(), X_.max(), num=int(Z.size / 3))
+    yi = np.linspace(Y_.min(), Y_.max(), num=int(Z.size / 3))
+    ic(xi, yi)
+    # xi = np.linspace(-1, 1, num=n+1)
+    # yi = np.linspace(-1, 1, num=n+1)
+    ic(X.shape, Y.shape, xi.shape, yi.shape, Z_.shape)
+    znew = interpolate.griddata((X_, Y_), Z_, (xi[None, :], yi[:, None]), method='linear')
+    ic(X.shape, Y.shape, znew.shape)
+
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.gca(projection='3d')
+    ax.plot_surface(X, Y, Z, cmap='summer', rstride=1, cstride=1, alpha=None)
     plt.show()
+
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.gca(projection='3d')
+    xnew, ynew = np.meshgrid(xi, yi)
+    ax.plot_surface(xnew, ynew, znew, cmap='summer', rstride=1, cstride=1, alpha=None, antialiased=True)
+    plt.show()
+    exit(1)
+
+    import os
+    import numpy as np
+    from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.pyplot as plt
+    from scipy.interpolate import griddata
+
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    # my_data = np.genfromtxt('2014_0.01_v3_HDF5.txt', delimiter=',', skip_header=1)
+    # my_data[my_data == 0] = np.nan
+    # my_data = my_data[~np.isnan(my_data).any(axis=1)]
+    my_data = []
+    n1, n2 = X.shape
+    for i in range(n1):
+        for j in range(n2):
+            my_data.append([X[i][j], Y[i][j], Z[i][j]])
+    my_data = np.array(my_data)
+    X = my_data[:, 0]
+    Y = my_data[:, 1]
+    Z = my_data[:, 2]
+    xi = np.linspace(X.min(), X.max(), num=int(len(Z) / 3))
+    yi = np.linspace(Y.min(), Y.max(), num=int(len(Z) / 3))
+    zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='nearest')
+
+    xig, yig = np.meshgrid(xi, yi)
+
+    surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
+    ic(xig.shape, yig.shape, zi.shape)
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    ax.set_title('2014 ATM Data 0.01 Degree Spacing')
+    ax.set_xlabel('Latitude')
+    ax.set_ylabel('Longitude')
+    ax.set_zlabel('Elevation (m)')
+    # ax.set_zlim3d(0, 8000)
+    plt.show()
+
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    zi = griddata((X, Y), Z, (xi[None, :], yi[:, None]), method='cubic')
+    xig, yig = np.meshgrid(xi, yi)
+
+    surf = ax.plot_surface(xig, yig, zi, cmap='gist_earth')
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    ax.set_title('2014 ATM Data 0.01 Degree Spacing')
+    ax.set_xlabel('Latitude')
+    ax.set_ylabel('Longitude')
+    ax.set_zlabel('Elevation (m)')
+    # ax.set_zlim3d(0, 8000)
+    plt.show()
+
+
+
+    # from mpl_toolkits.mplot3d import Axes3D
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+    # from matplotlib.path import Path
+    # import matplotlib.patches as patches
+    #
+    # fig = plt.figure()
+    # ax = fig.gca(projection='3d')
+    #
+    # x = np.linspace(0, 1, 100)
+    # X, Y = np.meshgrid(x, x)
+    # levels = np.linspace(-0.1, 0.4, 100)  # (z_min,z_max,number of contour),
+    #
+    # a = 0
+    # b = 1
+    # c = 2
+    # Z1 = a + .1 * np.sin(2 * X) * np.sin(4 * Y)
+    # Z2 = b + .1 * np.sin(3 * X) * np.sin(4 * Y)
+    # Z3 = c + .1 * np.sin(4 * X) * np.sin(5 * Y)
+    #
+    # plt.contourf(X, Y, Z1, levels=a + levels, cmap=plt.get_cmap('rainbow'))
+    # plt.contourf(X, Y, Z2, levels=b + levels, cmap=plt.get_cmap('rainbow'))
+    # plt.contourf(X, Y, Z3, levels=c + levels, cmap=plt.get_cmap('rainbow'))
+    #
+    # ax.set_xlim3d(0, 1)
+    # ax.set_ylim3d(0, 1)
+    # ax.set_zlim3d(0, 2)
+    #
+    # plt.show()
 

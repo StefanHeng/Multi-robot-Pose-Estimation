@@ -2,6 +2,7 @@ from copy import deepcopy
 
 import math
 import numpy as np
+from scipy import interpolate
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
 from sklearn.mixture import GaussianMixture
@@ -119,35 +120,29 @@ class Icp:
         :return: The error based on closest pair of matched points
         """
         def _pose_error(tsf_):
-            # ic(tsf_.shape, tsf_[:5])
-            tsf_ = tsl_n_angle2tsf(tsf_)
-            # ic(tsf_.shape, tsf_[:5])
-            src_match, tgt_match, idxs = self.nn_tgt((self.src @ tsf_.T)[:, :2])
-            return self.pts_match_error(src_match, tgt_match)
+            src_match, tgt_match, idxs = self.nn_tgt((self.src @ tsl_n_angle2tsf(tsf_).T)[:, :2])
+            err = self.pts_match_error(src_match, tgt_match)
+            # err *= idxs.shape[0] / self.src.shape[0] * 2**4
+            # if err <= 0.5:
+            #     ic(err, tsf_, idxs.shape)
+            return err
         if len(tsf.shape) == 2:
-            # return np.apply_along_axis(_pose_error, (1, 2), tsf)
-            # return np.apply_over_axes(_pose_error, tsf, axes=(1, 2))
             return np.apply_along_axis(_pose_error, 1, tsf)
         else:
             return _pose_error(tsf)
 
-    def pts_match_error(self, pts1, pts2):
+    @staticmethod
+    def pts_match_error(pts1, pts2):
         """
         :return: Pair wise euclidian distance/l2-norm between two lists of matched 2d points,
             normalized by number points
         """
         pts1 = pts1[:, :2]
         pts2 = pts2[:, :2]
-        # ic(pts1.shape, pts2.shape)
-        # ic(pts1, pts2)
-        # return np.sum(np.square(pts1 - pts2)) / pts1.shape[0]
-        # ic(np.linalg.norm(pts1[0] - pts2[0], ord=2))
         n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
-        # ic(n.shape, n[:5])
-        # n = np.linalg.norm(pts1 - pts2, ord=2, axis=0)
-        # ic(n.shape, n[:5])
-        # return n.mean()
-        return n.sum() / (n.size**2)
+        # ic(n.shape)
+        # return n.sum() / (n.size**2)
+        return n.mean()
 
     def __call__(self, tsf=np.identity(3), max_iter=20, min_d_err=1e-4, verbose=False):
         """
@@ -300,15 +295,15 @@ class PoseEstimator:
             """
             print(f'Searching by grid for pose estimates on target laser scan with [{pts.shape[0]}] points, with ...')
             if precision is None:
-                precision = dict(tsl=5e-1, angle=1 / 9)
-                # precision = dict(tsl=1e0, angle=1 / 2)
-            # ic(pts.shape, pcr.shape)
+                # precision = dict(tsl=5e-1, angle=1 / 9)
+                precision = dict(tsl=1e0, angle=1 / 2)
+                # precision = dict(tsl=3e0, angle=1)
             # ic(pts.max(axis=0), pts.min(axis=0))
             x_max, y_max = pts.max(axis=0)
             x_min, y_min = pts.min(axis=0)
-            edge = math.ceil(pts2max_dist(pcr))
-            x_ran = [math.floor(x_min) - edge, math.ceil(x_max) + edge]
-            y_ran = [math.floor(y_min) - edge, math.ceil(y_max) + edge]
+            edge = pts2max_dist(pcr)
+            x_ran = [math.floor(x_min-edge), math.ceil(x_max+edge)]
+            y_ran = [math.floor(y_min-edge), math.ceil(y_max+edge)]
 
             prec_tsl = precision['tsl']
             prec_ang = precision['angle']
@@ -319,52 +314,104 @@ class PoseEstimator:
             print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
             print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
             print(f'    angle with precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
-            print(f'    for a total of {opns.size} options')
-            # ic(opns.shape, opns[:5])
-            # tsfs = np.apply_along_axis(lambda x: tsl_n_angle2tsf(x[:2], x[-1]), 1, options)
-            # ic(tsfs.shape, tsfs[:5])
-            errs = Icp(pcr, pts).pose_error(opns)
-            # ic(errs.shape, errs[:5])
-            # n_tsl = errs.size / opns_angle.size
-            # ic(opns_angle.size)
+            print(f'    for a combined [{opns.size}] candidates')
 
-            # For each translation (x, y pair), pick the rotation with lowest error
-            opns_tsl = cartesian([opns_x, opns_y])
-            # ic(opns_tsl.shape, opns_tsl[:10])
+            errs = Icp(pcr, pts).pose_error(opns)
+            # For each translation (x, y pair), pick the rotation with the lowest error
+            # opns_tsl = cartesian([opns_x, opns_y])
             errs_max = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
-            # ic(errs_max.shape, errs_max[:5])
             errs_max = errs_max.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
             # ic(errs_max.shape, errs_max)
 
-            # fig = plt.figure(figsize=(16, 9))
-            # ax = plt.axes(projection='3d')
             fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
-            # ic(opns_x.shape, opns_y.shape)
-            # x, y = np.meshgrid(opns_x, opns_y)
-            # ic(x.shape, y.shape, errs_max.shape)
+            [X, Y], Z = np.meshgrid(opns_x, opns_y), -errs_max  # Negated cos lower error = better
 
-            surf = ax.plot_surface(  # contourf
-                *np.meshgrid(opns_x, opns_y), -errs_max,  # Negated for lower error = better
-                cmap='mako_r', edgecolor='none',
-                label='Loss'
+            def scale(arr, factor=4):
+                """
+                :param arr: 1D array of uniform values
+                :param factor: Factor to sample
+                :return: 1D array of `arr` with a finer sample,
+                    in particular, the distance between two adjacent points is `factor` times smaller
+                """
+                return np.linspace(arr[0], arr[-1], num=(arr.size-1) * factor + 1)
+            ic(opns_x.shape, scale(opns_x).shape)
+            ic(X, Y, Z)
+
+            # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
+            # X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
+            # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
+            n_x, n_y = scale(opns_x).size, scale(opns_y).size
+            Y_, X_ = np.meshgrid(np.linspace(-1, 1, num=n_x), np.linspace(-1, 1, num=n_y))  # reversed
+            ic(X_, Y_)
+            tck = interpolate.bisplrep(X, Y, Z, s=0)
+            ic(tck)
+            Z_ = interpolate.bisplev(X_[:, 0], Y_[0, :], tck)
+            ic(type(Z_), Z_)
+            ic(X_.shape, Y_.shape, Z_.shape)
+
+            X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
+            # exit(1)
+
+            surf = ax.plot_surface(  # Or, `contourf`
+                X, Y, Z,
+                # X_, Y_, Z_,
+                # cmap='mako_r',
+                # cmap='CMRmap',
+                # cmap='RdYlBu',
+                # cmap='Spectral',
+                cmap='Spectral_r',
+                # cmap='bone',
+                # cmap='gnuplot',
+                # cmap='gnuplot2',
+                # cmap='icefire',
+                # cmap='rainbow',
+                # cmap='rocket',
+                # cmap='terrain_r',
+                # cmap='twilight',
+                # cmap='twilight_shifted',
+                rcount=2**10, ccount=2**10,
+                edgecolor='none', antialiased=False,
+                label='Loss',
             )
-            surf._facecolors2d = surf._facecolor3d
-            surf._edgecolors2d = surf._edgecolor3d
-            # ax.plot(
-            #     pts[:, 0], pts[:, 1], zs=0, zdir='z',
-            #     label='Laser scan, target',
-            #     marker='.', ms=1, lw=0.5, c='orange',
+            # surf._facecolors2d = surf._facecolor3d
+            # surf._edgecolors2d = surf._edgecolor3d
+            # surf = ax.plot_surface(  # Or, `contourf`
+            #     # X, Y, Z,
+            #     X_, Y_, Z_,
+            #     # cmap='mako_r',
+            #     cmap='CMRmap',
+            #     # cmap='RdYlBu',
+            #     # cmap='Spectral',
+            #     # cmap='Spectral_r',
+            #     # cmap='bone',
+            #     # cmap='gnuplot',
+            #     # cmap='gnuplot2',
+            #     # cmap='icefire',
+            #     # cmap='rainbow',
+            #     # cmap='rocket',
+            #     # cmap='terrain_r',
+            #     # cmap='twilight',
+            #     # cmap='twilight_shifted',
+            #     edgecolor='none', antialiased=True,
+            #     label='Loss, smoothed',
             # )
-            cs = iter(sns.color_palette(palette='husl', n_colors=7))
-            plot_points(pts, zs=0.5, c=next(cs), label='Laser scan, target')
-            plot_points(pcr, zs=0.5, c=next(cs), label='Point cloud representation, source')
-            # fig.colorbar(surf, shrink=0.5, aspect=5)
-            # plt.colorbar(pad=2 ** (-5))
-            plt.colorbar(surf)
-            ax.set_title('surface')
+            # ax.contour(X, Y, Z)
+            fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**(-5))
+
+            cs = iter(reversed(sns.color_palette(palette='husl', n_colors=7)))
+            lvl = 0.25  # Level/Height of 2d plot
+            plot_points(pts, zs=lvl, c=next(cs), label='Laser scan, target')
+            c = next(cs)
+            plot_points(pcr, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
+            prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
+            plot_points(prc_moved,zs=lvl, c=c, alpha=0.7, label='Point cloud representation at actual pose')
+            # plt.colorbar(surf, )
+            # plt.colorbar(surf)
             plt.xlabel('x')
             plt.ylabel('y')
             ax.set_zlabel('Loss')
+            surf._facecolors2d = surf._facecolor3d
+            surf._edgecolors2d = surf._edgecolor3d
             plt.legend()
             plt.title('Grid search, loss against translation, best angle picked')
             plt.show()
@@ -412,23 +459,23 @@ if __name__ == '__main__':
         visualize(ptc_kuka, pts, tsf=init_tsf, title=title, xlim=[-2, 6], ylim=[-2, 2], mode='static', save=True)
     # check_icp_hsr()
 
-    c = Cluster.cluster
+    cls = Cluster.cluster
 
     def clustering_sanity_check():
         def sp():
-            lbs = c(pts, approach='spectral', n_clusters=8)
+            lbs = cls(pts, approach='spectral', n_clusters=8)
             plot_cluster(pts, lbs, title='Spectral on HSR', save=True)
 
         def hi(d):
-            lbs = c(pts, approach='hierarchical', distance_threshold=d)
+            lbs = cls(pts, approach='hierarchical', distance_threshold=d)
             plot_cluster(pts, lbs, title=f'Hierarchical on HSR, avg threshold={d}', save=True)
 
         def ga():
-            lbs = c(pts, approach='gaussian', n_components=6)
+            lbs = cls(pts, approach='gaussian', n_components=6)
             plot_cluster(pts, lbs, title='Gaussian Mixture on HSR', save=True)
 
         def db():
-            lbs = c(pts, approach='dbscan', eps=0.5, min_samples=16)
+            lbs = cls(pts, approach='dbscan', eps=0.5, min_samples=16)
             plot_cluster(pts, lbs, title='DBSCAN on HSR, eps=0.5', save=True)
 
         sp()
@@ -439,7 +486,9 @@ if __name__ == '__main__':
     # clustering_sanity_check()
 
     def icp_after_cluster():
-        lbs = c(pts, approach='hierarchical', distance_threshold=1)   # A good clustering result by empirical inspection
+        cls = Cluster.cluster
+        # A good clustering result by empirical inspection
+        lbs = cls(pts, approach='hierarchical', distance_threshold=1)
         d_clusters = {lb: pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
 
         cls = d_clusters[11]  # The cluster indicating real location of KUKA
