@@ -2,7 +2,6 @@ from copy import deepcopy
 
 import math
 import numpy as np
-from scipy import interpolate
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
 from sklearn.mixture import GaussianMixture
@@ -318,67 +317,15 @@ class PoseEstimator:
 
             errs = Icp(pcr, pts).pose_error(opns)
             # For each translation (x, y pair), pick the rotation with the lowest error
-            # opns_tsl = cartesian([opns_x, opns_y])
             errs_max = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
             errs_max = errs_max.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
-            # ic(errs_max.shape, errs_max)
 
             fig, ax = plt.subplots(figsize=(12, 12), subplot_kw=dict(projection='3d'))
-            [X, Y], Z = np.meshgrid(opns_x, opns_y), -errs_max  # Negated cos lower error = better
-
-            def scale(arr, factor=4, as_sz=False):
-                """
-                :param arr: 1D array of uniform values
-                :param factor: Factor to sample
-                :param as_sz: If true, return the size of scaled aray
-                :return: 1D array of `arr` with a finer sample,
-                    in particular, the distance between two adjacent points is `factor` times smaller
-                """
-                num = (arr.size-1) * factor + 1
-                return num if as_sz else np.linspace(arr[0], arr[-1], num=num)
-            ic(opns_x.shape, scale(opns_x).shape)
-            ic(X, Y, Z)
-
-            # # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
-            # # X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
-            # # X_, Y_ = np.mgrid[-1:1:80j, -1:1:80j]
-            # n_x, n_y = scale(opns_x).size, scale(opns_y).size
-            # Y_, X_ = np.meshgrid(np.linspace(-1, 1, num=n_x), np.linspace(-1, 1, num=n_y))  # reversed
-            # ic(X_, Y_)
-            # tck = interpolate.bisplrep(X, Y, Z, s=0)
-            # ic(tck)
-            # Z_ = interpolate.bisplev(X_[:, 0], Y_[0, :], tck)
-            # ic(type(Z_), Z_)
-            # ic(X_.shape, Y_.shape, Z_.shape)
-            # X_, Y_ = np.meshgrid(scale(opns_x), scale(opns_y))
-            # # exit(1)
-
-            X_f = X.flatten()
-            Y_f = Y.flatten()
-            Z_f = Z.flatten()
-            # xi = np.linspace(X_.min(), X_.max(), num=10)
-            # yi = np.linspace(Y_.min(), Y_.max(), num=10)
-            # ic(xi, yi)
-            # xi = np.linspace(-1, 1, num=n+1)
-            # yi = np.linspace(-1, 1, num=n+1)
-            # ic(X.shape, Y.shape, xi.shape, yi.shape, Z_.shape)
-            # scale(opns_x)
-            # Z_ = interpolate.griddata((X_f, Y_f), Z_f, (opns_x[:, None], opns_y[:, None]), method='linear')
-            # n = int((scale(opns_x, as_sz=True) + scale(opns_y, as_sz=True)) / 2)
-            # ic(n)
-            # x_inter = np.linspace(opns_x[0], opns_x[-1], num=n).reshape(1, -1)
-            # y_inter = np.linspace(opns_y[0], opns_y[-1], num=n).reshape(1, -1)
-            # ic(X_f.shape, Y_f.shape, Z_f.shape, x_inter.shape, y_inter.shape)
-            # `interpolate.griddata` requires interpolation points of the same length across all dimensions
-            x_inter = scale(opns_x).reshape(1, -1)
-            y_inter = scale(opns_y).reshape(-1, 1)
-            Z_ = interpolate.griddata((X_f, Y_f), Z_f, (x_inter, y_inter), method='cubic')
-            X_, Y_ = np.meshgrid(x_inter, y_inter)
-            ic(Z_.shape)
-
-            surf = ax.plot_surface(  # Or, `contourf`
-                # X, Y, Z,
-                X_, Y_, Z_,
+            [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_max  # Negated cos lower error = better
+            if interpolate:
+                X, Y, Z = interpolate(X, Y, Z, opns_x, opns_y, factor=2**3)
+            surf = ax.plot_surface(
+                X, Y, Z,
                 # cmap='mako_r',
                 # cmap='CMRmap',
                 # cmap='RdYlBu',
@@ -397,40 +344,25 @@ class PoseEstimator:
                 edgecolor='none', antialiased=False,
                 label='Loss',
             )
-            # surf._facecolors2d = surf._facecolor3d
-            # surf._edgecolors2d = surf._edgecolor3d
-            # surf = ax.plot_surface(  # Or, `contourf`
-            #     # X, Y, Z,
-            #     X_, Y_, Z_,
-            #     # cmap='mako_r',
-            #     cmap='CMRmap',
-            #     # cmap='RdYlBu',
-            #     # cmap='Spectral',
-            #     # cmap='Spectral_r',
-            #     # cmap='bone',
-            #     # cmap='gnuplot',
-            #     # cmap='gnuplot2',
-            #     # cmap='icefire',
-            #     # cmap='rainbow',
-            #     # cmap='rocket',
-            #     # cmap='terrain_r',
-            #     # cmap='twilight',
-            #     # cmap='twilight_shifted',
-            #     edgecolor='none', antialiased=True,
-            #     label='Loss, smoothed',
-            # )
-            # ax.contour(X, Y, Z)
-            fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**(-5))
+            # offset =
+            # min_ = max_ - ran_ / (2**5)
+            # levels = np.linspace(min_, max_, num=2**4)
+            # ic(levels) pad=2**(-5))
+            ax.contour(
+                X, Y, Z,
+                levels=np.linspace(Z.min(), Z.max(), 2**4), offset=Z.min() - (Z.max() - Z.min()) / (2**4), zdir='z',
+                cmap='Spectral_r',
+            )
 
             cs = iter(reversed(sns.color_palette(palette='husl', n_colors=7)))
-            lvl = 0.25  # Level/Height of 2d plot
+            lvl = 7  # Level/Height of 2d point plots
             plot_points(pts, zs=lvl, c=next(cs), label='Laser scan, target')
             c = next(cs)
             plot_points(pcr, zs=lvl, c=c, alpha=0.5, label='Point cloud representation, source')
             prc_moved = (extend_1s(pcr) @ tsl_n_angle2tsf([2.5, -0.75], -0.15).T)[:, :2]
-            plot_points(prc_moved,zs=lvl, c=c, alpha=0.7, label='Point cloud representation at actual pose')
-            # plt.colorbar(surf, )
-            # plt.colorbar(surf)
+            plot_points(prc_moved, zs=lvl, c=c, alpha=0.7, label='Point cloud representation at actual pose')
+
+            fig.colorbar(surf, shrink=0.5, aspect=2**5)
             plt.xlabel('x')
             plt.ylabel('y')
             ax.set_zlabel('Loss')

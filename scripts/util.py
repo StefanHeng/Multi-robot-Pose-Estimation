@@ -5,6 +5,7 @@ from math import pi, acos, degrees, sqrt
 from functools import reduce
 
 import numpy as np
+import scipy.interpolate
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Ellipse
 from matplotlib import transforms, rcParams
@@ -524,6 +525,31 @@ def plot_cluster(data, labels, title=None, save=False):
     plt.gca().set_aspect('equal')
     save_fig(save, title)
     plt.show()
+
+
+def scale(arr, factor=4, as_sz=False):
+    """
+    :param arr: 1D array of uniform values
+    :param factor: Factor to sample
+    :param as_sz: If true, return the size of scaled aray
+    :return: 1D array of `arr` with a finer sample,
+        in particular, the distance between two adjacent points is `factor` times smaller
+    """
+    num = (arr.size - 1) * factor + 1
+    return num if as_sz else np.linspace(arr[0], arr[-1], num=num)
+
+
+def interpolate(X, Y, Z, x_coords, y_coords, factor=4, method='cubic'):
+    """
+    :return: Interpolated X, Y, Z coordinate tuples, given by a factor, and a method
+        in `scipy.interpolate.griddata`
+    """
+    X_f, Y_f, Z_f = X.flatten(), Y.flatten(), Z.flatten()
+    x_inter = scale(x_coords, factor=factor).reshape(1, -1)
+    y_inter = scale(y_coords, factor=factor).reshape(-1, 1)
+    X_, Y_ = np.meshgrid(x_inter, y_inter)
+    Z_ = scipy.interpolate.griddata((X_f, Y_f), Z_f, (x_inter, y_inter), method=method)
+    return X_, Y_, Z_
 
 
 if __name__ == '__main__':
