@@ -785,17 +785,20 @@ if __name__ == '__main__':
     # arr = np.arange(24).reshape(4, 6)
     # ic(arr, arr[::-1, ::-1])
 
-    d1 = dict(
-        a=dict(
-            b=1,
-            c=2
-        )
-    )
-    d2 = dict(
-        a=dict(
-            a=3,
-            c=2
-        )
-    )
-    ic(d1 | d2)  # So not recursive
+    # d1 = dict(
+    #     a=dict(
+    #         b=1,
+    #         c=2
+    #     )
+    # )
+    # d2 = dict(
+    #     a=dict(
+    #         a=3,
+    #         c=2
+    #     )
+    # )
+    # ic(d1 | d2)  # So not recursive
+
+    fn = lambda a, b: ic(a, b)
+    fn(1, 2)
 

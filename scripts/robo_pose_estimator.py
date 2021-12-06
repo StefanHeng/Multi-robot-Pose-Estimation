@@ -1,6 +1,7 @@
 from copy import deepcopy
-
 import math
+import pickle
+
 import numpy as np
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
@@ -149,23 +150,24 @@ class Loss:
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
-    def pose_error(self, src, tsf, labels=None, bias=False):
+    def pose_error(self, src, tsf, labels=None, bias=False, n=2):
         """
         :param src: List of 2d points to match target points
         :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
             or list of proposed translations
-        :param labels: 1D list, cluster assignments for `src` points,
-            where the loss for each cluster is computed independently
+        :param labels: 1D list, cluster assignments for source points,
+            If specified, the target points are split by clusters where loss is computed for each cluster
         :param bias: If true, bias transformations with more points matched linearly
+        :param n: Order of norm
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, the lowest error returned among all clusters
         """
         def _pose_error(cluster):
             def __pose_error(tsf_):
                 src_match, tgt_match, idxs = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)))
-                err = self.pts_match_error(src_match, tgt_match)
+                err = self.pts_match_error(src_match, tgt_match, n=n)
                 # ic(idxs.shape[0], self.tgt.shape[0])
-                return err * idxs.shape[0] / self.tgt.shape[0]
+                return err * idxs.shape[0] if bias else err
             if len(tsf.shape) == 2:
                 return np.apply_along_axis(__pose_error, 1, tsf)
             else:
@@ -174,32 +176,26 @@ class Loss:
             return _pose_error(src)
         else:
             def _get(idx, c):
-                print(f'Getting errors for cluster #{idx+1}... ')
+                print(f'{now()}| Getting errors for cluster #{idx+1}... ')
                 return _pose_error(c)
             clusters = [src[np.where(labels == lb)] for lb in np.unique(labels)]
-            ic(src.shape)
-            ic(len(clusters))
             # Pick the one with the lowest loss
             return np.stack([_get(idx, c) for idx, c in enumerate(clusters)]).min(axis=0)
-            # ic(ret.shape, ret[:5])
-            # exit(1)
 
     @staticmethod
-    def pts_match_error(pts1, pts2):
+    def pts_match_error(pts1, pts2, n=2):
         """
         :return: Pair wise euclidian distance/l2-norm between two lists of matched 2d points,
             normalized by number points
         """
-        pts1 = pts1[:, :2]
-        pts2 = pts2[:, :2]
-        n = np.linalg.norm(pts1 - pts2, ord=2, axis=1)
+        n = np.linalg.norm(pts1[:, :2] - pts2[:, :2], ord=n, axis=1)
         # return n.sum() / (n.size**2)
         return n.mean()
 
 
 class Search:
     @staticmethod
-    def grid_search(pts, grid=None, labels=None, reverse=False):
+    def grid_search(pts, grid=None, reverse=False, save=False, err_kwargs=None):
         """
         :param pts: 2-tuple of list of 2D points to match, (source points, target points)
         :param grid: Dict containing a `precision` and a `range` key
@@ -208,17 +204,17 @@ class Search:
                 angle range defaults to 2-tuple within range [-1, 1], the angle to search through
                     For shapes of rotational symmetry, don't need to explore entire 2pi degree space,
                         e.g. For rectangles, any range covering 1pi suffice
-        :param labels: List of cluster assignments, for the target points
-            If specified, the target points are split by clusters where matched points is computed for each cluster
         :param reverse: If true, `pts` are treated as source and targets inversely,
             i.e. in the order (target points, source points)
+        :param save: If true, errors and configuration settings are saved to `pickle`
+        :param err_kwargs: Arguments passed to `Loss.pose_error`
         :return: 4-tuple of (X translation options, Y translation options, Angle options,
             Corresponding error for each setup combination)
 
         Systematically search for the confidence of robot A's pose, for each x, y, theta setting
         """
         src, tgt = reversed(pts) if reverse else pts
-        print(f'Grid-searching for pose estimates on ... ')
+        print(f'{now()}| Grid-searching for pose estimates on ... ')
         print(f'    target of [{tgt.shape[0]}] points, and ')
         print(f'    source of [{src.shape[0]}] points ... ')
 
@@ -244,9 +240,7 @@ class Search:
             grid[ran] = (ran in grid and (dft_ran | grid[ran])) or dft_ran
         else:
             grid = {prec: dft_prec, ran: dft_ran}
-        x_ran: tuple[int, int] = grid[ran]['x']
-        y_ran: tuple[int, int] = grid[ran]['y']
-        angle_ran: tuple[int, int] = grid[ran]['angle']
+        x_ran, y_ran, angle_ran = grid[ran]['x'], grid[ran]['y'], grid[ran]['angle']
         # ic(pts.max(axis=0), pts.min(axis=0))
         prec_tsl = grid[prec]['tsl']
         prec_ang = grid[prec]['angle']
@@ -259,8 +253,22 @@ class Search:
         print(f'    angle range {angle_ran}, at precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
         print(f'    for a combined [{opns.shape[0]}] candidate setups... ')
 
-        errs = Loss(tgt).pose_error(src, opns, labels=labels)
-        print(f'... completed')
+        if err_kwargs is None:
+            err_kwargs = dict()
+        errs = Loss(tgt).pose_error(src, opns, **err_kwargs)
+        print(f'{now()}| ... completed')
+
+        if save:
+            d = dict(
+                options_x=opns_x,
+                options_y=opns_y,
+                options_angle=opns_ang,
+                errors=errs
+            )
+            fnm = f'gird-search, {[x_ran, y_ran, prec_tsl]}, {[angle_ran, prec_ang]}, {now()}.pickle'
+            with open(fnm, 'wb') as handle:
+                pickle.dump(d, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                print(f'{now()}| Grid search result write to pickle completed ')
         return opns_x, opns_y, opns_ang, errs
 
 
@@ -387,12 +395,12 @@ class PoseEstimator:
             # ]))
             pass
 
-        def grid_search(self, precision=None, labels=None, reverse_pts=False, plot=False, plot_kwargs=None):
+        def grid_search(self, precision=None, reverse_pts=False, plot=False, plot_kwargs=None, err_kwargs=None):
             def get_pts(a, b):
                 return (b, a) if reverse_pts else (a, b)
 
             # ret1 = Search.grid_search(get_pts(self.pcr_a, self.pts_b), precision=precision, labels=labels)
-            ret2 = Search.grid_search(get_pts(self.pcr_b, self.pts_a), precision=precision, labels=labels)
+            ret2 = Search.grid_search(get_pts(self.pcr_b, self.pts_a), **err_kwargs)
             if plot:
                 plot_grid_search(self.pcr_b, self.pts_a, *ret2, **plot_kwargs)
             return ret2
@@ -548,12 +556,11 @@ if __name__ == '__main__':
 
         ret = Search.grid_search(
             (pcr_kuka, pts_hsr),
-            labels=lbs,
             reverse=True,
-            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1)))
+            save=True,
+            grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
+            err_kwargs=dict(labels=lbs, bias=True, n=2)
         )
-        # for i in ret:
-        #     ic(i.shape)
         plot_grid_search(
             pts_hsr, pcr_kuka, *ret,
             inverse_loss=True,
@@ -563,7 +570,7 @@ if __name__ == '__main__':
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points in best cluster'
         )
-    grid_search_clustered()
+    # grid_search_clustered()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -582,3 +589,25 @@ if __name__ == '__main__':
         tsf_rev = np.linalg.inv(tsf)  # Looks like
         plot_icp_result(pcr_kuka, pts_cls, tsf_rev, init_tsf=tsl_n_angle2tsf([x, y]))
     # explore_visualize_reversed_icp()
+
+    def check_grid_search_cluster():
+        fnm = 'gird-search, [(-5, 5), (-5, 5), 0.25], [(0, 1), 0.05], 2021-12-06 00:00:37.pickle'
+        with open(fnm, 'rb') as handle:
+            d = pickle.load(handle)
+            opns_x = d['options_x']
+            opns_y = d['options_y']
+            opns_ang = d['options_angle']
+            errs = d['errors']
+            opns = cartesian([opns_x, opns_y, opns_ang])
+            ic(opns.shape, errs.shape)
+            idxs_sort = np.argsort(errs)
+            opns = opns[idxs_sort]
+            errs = errs[idxs_sort]
+            n = 20
+            for opn, err in zip(opns[:n], errs[:n]):
+                ic(opn, err)
+            ic()
+            for opn, err in zip(opns[-n:], errs[-n:]):
+                ic(opn, err)
+
+    check_grid_search_cluster()

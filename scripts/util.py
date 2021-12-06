@@ -5,6 +5,7 @@ from math import pi, acos, degrees, sqrt
 from functools import reduce
 from typing import Union
 from collections.abc import Iterable
+from datetime import datetime
 
 import numpy as np
 import scipy.interpolate
@@ -21,11 +22,7 @@ from scripts.data_path import *
 
 rcParams['figure.constrained_layout.use'] = True
 rcParams["figure.dpi"] = 100
-# font = {'family' : 'normal',
-#         'weight' : 'bold',
-#         'size'   : 22}
 rcParams['font.size'] = 12
-# matplotlib.rc('font', **font)
 sns.set_style('darkgrid')
 
 
@@ -41,6 +38,11 @@ def json_load(fnm):
     scans = json.load(f)
     f.close()
     return scans
+
+
+def now(as_str=True):
+    d = datetime.now()
+    return d.strftime('%Y-%m-%d %H:%M:%S') if as_str else d
 
 
 def get(dic, ks):
@@ -464,7 +466,6 @@ def plot_icp_result(
 
         handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
         by_label = dict(zip(labels_, handles))
-        # by_label = dict(zip(*plt.gca().get_legend_handles_labels()))
         plt.legend(by_label.values(), by_label.keys())
 
         save_fig(save, t_)
@@ -680,20 +681,31 @@ def plot_grid_search(
             [0, 0, top],
             [wd/2, 0, top],
         ])
+        api = 'Actual pose indicator'
         kwargs_origin = dict(zorder=ord_2d, ms=10)
         plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=top, **kwargs_origin)
         plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=bot, **kwargs_origin)
         segs[:, :2] = apply_tsf_2d(segs, tsf_ideal)
-        plot_points3d(segs, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
+        plot_points3d(segs, zorder=ord_2d, c='black', ls='dashed', lw=1, label=api)
 
     fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**-4)
     plt.xlabel('Translation in X (m)')
     plt.ylabel('Translation in y (m)')
     ax.set_zlabel(zlabel)
     plt.legend()
-    prec = str(tuple([opns_x[1]-opns_x[0], opns_y[1]-opns_y[0], opns_ang[1]-opns_ang[0]]))
+    # handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
+    # by_label = dict(zip(labels_, handles))
+    # plt.legend(by_label.values(), by_label.keys())
+
+    def prec_pair(nm, mag):
+        return r'$\Delta ' + nm + r' = ' + str(mag) + r'$'
+
+    # prec = str(tuple([opns_x[1]-opns_x[0], opns_y[1]-opns_y[0], opns_ang[1]-opns_ang[0]]))
+    prec = f'{prec_pair("x", opns_x[1]-opns_x[0])}, ' \
+           f'{prec_pair("y", opns_y[1]-opns_y[0])}'
+    prec += ', ' + prec_pair(r'\theta', round(opns_ang[1]-opns_ang[0], 2))
     t = r'Loss against translation grid search, by best $\theta$'
-    t = f'{t}, precision {prec}'
+    t = f'{t} for {prec}'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
