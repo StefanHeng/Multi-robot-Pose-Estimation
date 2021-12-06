@@ -160,7 +160,7 @@ class Loss:
         :param bias: If true, bias transformations with more points matched linearly
         :param n: Order of norm
         :return: If `labels` unspecified, the error based on closest pair of matched points;
-            If `labels` specified, the lowest error returned among all clusters
+            If `labels` specified, 2-tuple of (label-to-index mapping, error for each cluster in the mapping order)
         """
         def _pose_error(cluster):
             def __pose_error(tsf_):
@@ -178,9 +178,14 @@ class Loss:
             def _get(idx, c):
                 print(f'{now()}| Getting errors for cluster #{idx+1}... ')
                 return _pose_error(c)
-            clusters = [src[np.where(labels == lb)] for lb in np.unique(labels)]
+            label_idxs = {lb: idx for idx, lb in enumerate(np.unique(labels))}
+            # ic(label_idxs)
+            clusters = [src[np.where(labels == lb)] for lb in label_idxs]
             # Pick the one with the lowest loss
-            return np.stack([_get(idx, c) for idx, c in enumerate(clusters)]).min(axis=0)
+            errs = np.stack([_get(idx, c) for idx, c in enumerate(clusters)])
+            # ic(errs.shape)
+            return label_idxs, errs.T
+            # return np.stack([_get(idx, c) for idx, c in enumerate(clusters)]).min(axis=0)
 
     @staticmethod
     def pts_match_error(pts1, pts2, n=2):
@@ -265,10 +270,13 @@ class Search:
                 options_angle=opns_ang,
                 errors=errs
             )
+            if 'labels' in err_kwargs:
+                d['label_indices'] = errs[0]
+                d['errors'] = errs[1]
             fnm = f'gird-search, {[x_ran, y_ran, prec_tsl]}, {[angle_ran, prec_ang]}, {now()}.pickle'
             with open(fnm, 'wb') as handle:
                 pickle.dump(d, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                print(f'{now()}| Grid search result write to pickle completed ')
+                print(f'{now()}| Grid search result written to pickle ')
         return opns_x, opns_y, opns_ang, errs
 
 
@@ -557,20 +565,21 @@ if __name__ == '__main__':
         ret = Search.grid_search(
             (pcr_kuka, pts_hsr),
             reverse=True,
-            save=True,
-            grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
+            # save=True,
+            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
             err_kwargs=dict(labels=lbs, bias=True, n=2)
         )
         plot_grid_search(
             pts_hsr, pcr_kuka, *ret,
             inverse_loss=True,
+            labels=lbs,
             inverse_pts=True,
             interp=False,
             save=True,
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points in best cluster'
         )
-    # grid_search_clustered()
+    grid_search_clustered()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -609,5 +618,4 @@ if __name__ == '__main__':
             ic()
             for opn, err in zip(opns[-n:], errs[-n:]):
                 ic(opn, err)
-
-    check_grid_search_cluster()
+    # check_grid_search_cluster()

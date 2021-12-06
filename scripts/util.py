@@ -11,9 +11,8 @@ import numpy as np
 import scipy.interpolate
 from matplotlib import transforms, rcParams
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Ellipse, FancyArrowPatch
+from matplotlib.patches import Rectangle, Ellipse
 from matplotlib.widgets import Button
-from mpl_toolkits.mplot3d import proj3d
 import seaborn as sns
 import pint
 from icecream import ic
@@ -377,7 +376,7 @@ def plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
 
 def plot_icp_result(
         src, tgt, tsf,
-        title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
+        title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True, show=True,
         init_tsf=np.identity(3), mode='static', scl=1
 ):
     """
@@ -390,6 +389,7 @@ def plot_icp_result(
     :param xlim: X limit for plot, inferred if not given
     :param ylim: Y limit for plot, inferred if not given
     :param with_arrow: If true, matched points are shown with arrows
+    :param show: If true, show the plot
     :param init_tsf: Initial transformation guess for ICP
     :param mode: Plotting mode, one of [`static`, `animate`, `control`]
     :param scl: Plot window scale
@@ -508,16 +508,24 @@ def plot_icp_result(
         _step(N_STT-1, t)
 
     plt.ioff()  # So that window doesn't close
-    plt.show()
+    if show:
+        plt.show()
 
 
-def plot_cluster(data, labels, title=None, save=False):
+def plot_cluster(data, labels, title=None, save=False, new=True, show=True, eclipse=True, line_kwargs=None):
     d_clusters = {lb: data[np.where(labels == lb)] for lb in np.unique(labels)}
 
     cs = iter(sns.color_palette(palette='husl', n_colors=len(d_clusters) + 1))
     x, y = data[:, 0], data[:, 1]
-    fig, ax = plt.subplots(figsize=(12, 12 / np.ptp(x) * np.ptp(y)), constrained_layout=True)
-    plt.plot(x, y, marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole')
+    if new:
+        fig, ax = plt.subplots(figsize=(12, 12 / np.ptp(x) * np.ptp(y)), constrained_layout=True)
+    else:
+        ax = plt.gca()
+    # ic(ex)
+    plt.plot(x, y, **(dict(marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole') | line_kwargs))
+    line_kwargs = dict(
+        marker='o', ms=0.4, lw=0.25
+    ) | line_kwargs if line_kwargs is not None else dict()
 
     for lb, d in d_clusters.items():
         x_, y_ = d[:, 0], d[:, 1]
@@ -548,21 +556,22 @@ def plot_cluster(data, labels, title=None, save=False):
             ellipse.set_transform(tsf + ax.transData)
             return ax.add_patch(ellipse)
 
-        if lb != -1:  # Noise as in DBSCAN
+        if eclipse and lb != -1:  # Noise as in DBSCAN
             confidence_ellipse(n_std=1.25, fc=c, alpha=0.25)
 
         lb = f'Cluster {lb + 1}'
-        # plt.scatter(x_[:, 0], x_[:, 1], marker='.', s=2, label=lb)
-        ax.plot(x_, y_, marker='o', ms=0.5, lw=0.25, c=c, label=lb)
+        ax.plot(x_, y_, **(dict(c=c, label=lb) | line_kwargs))
 
     t = 'Clustering results'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
     plt.legend()
-    plt.gca().set_aspect('equal')
+    if not hasattr(ax, 'get_zlim'):  # Not supported in 3D projection
+        ax.set_aspect('equal')
     save_fig(save, t)
-    plt.show()
+    if show:
+        plt.show()
 
 
 def scale(arr, factor=4, as_sz=False):
@@ -603,7 +612,7 @@ def get_offset(arr, frac=2**4):
 
 
 def plot_grid_search(
-        pcr, pts, opns_x, opns_y, opns_ang, errs,
+        pcr, pts, opns_x, opns_y, opns_ang, errs, labels=None,
         interp=True, inverse_loss=False, inverse_pts=False,
         title=None, save=False, zlabel='Loss', offset_frac=2**3,
         tsf_ideal=None,
@@ -617,18 +626,21 @@ def plot_grid_search(
 
     Plots loss against translation (x, y pair), for each setup, the angle/rotation with the lowest loss is picked
     """
+    label_idxs = None
+    if labels is not None:
+        assert len(errs) == 2
+        label_idxs, errs = errs
     if inverse_pts:  # Illustrate as if ICP ran in the reversed order
-        # ic(tsf_ideal, np.linalg.inv(tsf_ideal))
-        # tsf_ideal = np.linalg.inv(tsf_ideal)
         opns_x = -opns_x[::-1]
         opns_y = -opns_y[::-1]
         errs = errs[::-1]
         pcr, pts = pts, pcr
-    errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
-    errs_best_ang = errs_best_ang.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
+
+    errs_by_tsl = np.min(errs.reshape(-1, opns_ang.size * len(label_idxs) if labels is not None else 1), axis=-1)
+    errs_by_tsl = errs_by_tsl.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
     d = 12
     fig, ax = plt.subplots(figsize=(d, d), subplot_kw=dict(projection='3d'))
-    [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_best_ang  # Negated cos lower error = better
+    [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_by_tsl  # Negated cos lower error = better
 
     if inverse_loss:
         Z = -Z
@@ -659,11 +671,17 @@ def plot_grid_search(
     cp = list(reversed(cp)) if inverse_loss else cp
     cs = iter(cp)
 
+    lb_tgt = 'Laser scan, target'
     plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10, alpha=0.5)
-    plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label='Laser scan, target')
     c = next(cs)
     plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
-    if tsf_ideal is not None:  # Illustrate the ideal translation
+    if labels is not None:
+        plot_cluster(pts, labels, show=False, new=False, eclipse=False, line_kwargs=dict(
+            zorder=ord_2d, zs=top, label=lb_tgt
+        ))
+    else:
+        plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label=lb_tgt)
+    if tsf_ideal is not None:  # Illustrate the ideal translation+-
         plot_points(
             apply_tsf_2d(pcr, tsf_ideal),
             zorder=ord_2d, zs=top, c=c, alpha=0.7,
@@ -693,9 +711,9 @@ def plot_grid_search(
     plt.ylabel('Translation in y (m)')
     ax.set_zlabel(zlabel)
     plt.legend()
-    # handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
-    # by_label = dict(zip(labels_, handles))
-    # plt.legend(by_label.values(), by_label.keys())
+    handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
+    by_label = dict(zip(labels_, handles))
+    plt.legend(by_label.values(), by_label.keys())
 
     def prec_pair(nm, mag):
         return r'$\Delta ' + nm + r' = ' + str(mag) + r'$'
