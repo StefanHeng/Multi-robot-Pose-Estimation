@@ -149,13 +149,14 @@ class Loss:
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
-    def pose_error(self, src, tsf, labels=None):
+    def pose_error(self, src, tsf, labels=None, bias=False):
         """
         :param src: List of 2d points to match target points
         :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
             or list of proposed translations
         :param labels: 1D list, cluster assignments for `src` points,
             where the loss for each cluster is computed independently
+        :param bias: If true, bias transformations with more points matched linearly
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, the lowest error returned among all clusters
         """
@@ -163,7 +164,8 @@ class Loss:
             def __pose_error(tsf_):
                 src_match, tgt_match, idxs = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)))
                 err = self.pts_match_error(src_match, tgt_match)
-                return err
+                # ic(idxs.shape[0], self.tgt.shape[0])
+                return err * idxs.shape[0] / self.tgt.shape[0]
             if len(tsf.shape) == 2:
                 return np.apply_along_axis(__pose_error, 1, tsf)
             else:
@@ -197,47 +199,65 @@ class Loss:
 
 class Search:
     @staticmethod
-    def grid_search(pts, precision=None, labels=None, reverse=False, angle_range=(-1, 1)):
+    def grid_search(pts, grid=None, labels=None, reverse=False):
         """
         :param pts: 2-tuple of list of 2D points to match, (source points, target points)
-        :param precision: Dict containing precision of translation in meters and angle in radians to search
+        :param grid: Dict containing a `precision` and a `range` key
+            `precision` contains a dict containing precision of translation in meters and angle in radians to search
+            `range` contains a dict containing range of translation in meters and angle in radians to search
+                angle range defaults to 2-tuple within range [-1, 1], the angle to search through
+                    For shapes of rotational symmetry, don't need to explore entire 2pi degree space,
+                        e.g. For rectangles, any range covering 1pi suffice
         :param labels: List of cluster assignments, for the target points
             If specified, the target points are split by clusters where matched points is computed for each cluster
         :param reverse: If true, `pts` are treated as source and targets inversely,
             i.e. in the order (target points, source points)
-        :param angle_range: 2-tuple within range [-1, 1], the angle to search through
-            For shapes of rotational symmetry, don't need to explore entire 2pi degree space,
-                e.g. For rectangles, any range covering 1pi suffice
         :return: 4-tuple of (X translation options, Y translation options, Angle options,
             Corresponding error for each setup combination)
 
         Systematically search for the confidence of robot A's pose, for each x, y, theta setting
         """
-        if precision is None:
-            # precision = dict(tsl=5e-1, angle=1 / 9)
-            # precision = dict(tsl=1e0, angle=1 / 2)
-            precision = dict(tsl=3, angle=1)
         src, tgt = reversed(pts) if reverse else pts
         print(f'Grid-searching for pose estimates on ... ')
         print(f'    target of [{tgt.shape[0]}] points, and ')
         print(f'    source of [{src.shape[0]}] points ... ')
-        # ic(pts.max(axis=0), pts.min(axis=0))
-        x_max, y_max = tgt.max(axis=0)
-        x_min, y_min = tgt.min(axis=0)
-        edge = pts2max_dist(src)
-        x_ran = [math.floor(x_min-edge), math.ceil(x_max+edge)]
-        y_ran = [math.floor(y_min-edge), math.ceil(y_max+edge)]
 
-        prec_tsl = precision['tsl']
-        prec_ang = precision['angle']
+        def default_ran():
+            x_max, y_max = tgt.max(axis=0)
+            x_min, y_min = tgt.min(axis=0)
+            edge = pts2max_dist(src)
+            return dict(
+                x=(math.floor(x_min-edge), math.ceil(x_max+edge)),
+                y=(math.floor(y_min-edge), math.ceil(y_max+edge)),
+                angle=(-1, 1)
+            )
+
+        def default_prec():
+            return dict(tsl=3, angle=1)
+            # precision = dict(tsl=5e-1, angle=1 / 9)
+            # precision = dict(tsl=1e0, angle=1 / 2)
+
+        prec, ran = 'precision', 'range'
+        dft_prec, dft_ran = default_prec(), default_ran()
+        if grid is not None:
+            grid[prec] = (prec in grid and (dft_prec | grid[prec])) or dft_prec
+            grid[ran] = (ran in grid and (dft_ran | grid[ran])) or dft_ran
+        else:
+            grid = {prec: dft_prec, ran: dft_ran}
+        x_ran: tuple[int, int] = grid[ran]['x']
+        y_ran: tuple[int, int] = grid[ran]['y']
+        angle_ran: tuple[int, int] = grid[ran]['angle']
+        # ic(pts.max(axis=0), pts.min(axis=0))
+        prec_tsl = grid[prec]['tsl']
+        prec_ang = grid[prec]['angle']
         opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / prec_tsl+1))
         opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / prec_tsl+1))
-        opns_ang = np.linspace(*angle_range, num=int(2 / prec_ang+1))[1:]
+        opns_ang = np.linspace(*angle_ran, num=int((angle_ran[1]-angle_ran[0]) / prec_ang+1))[1:]
         opns = cartesian([opns_x, opns_y, opns_ang])
         print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
         print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
-        print(f'    angle range {angle_range}, at precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
-        print(f'    for a combined [{opns.size}] candidates... ')
+        print(f'    angle range {angle_ran}, at precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
+        print(f'    for a combined [{opns.shape[0]}] candidate setups... ')
 
         errs = Loss(tgt).pose_error(src, opns, labels=labels)
         print(f'... completed')
@@ -478,11 +498,11 @@ if __name__ == '__main__':
         ret = Search.grid_search(
             (pcr_kuka, pts_hsr),
             # precision=dict(tsl=0.25, angle=1/20),
-            angle_range=(0, 1)
+            # angle_range=(0, 1)
         )
         plot_grid_search(
             pcr_kuka, pts_hsr, *ret,
-            inverse=True,
+            inverse_loss=True,
             # save=True,
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points',
@@ -517,7 +537,7 @@ if __name__ == '__main__':
             for cm in [cmap, f'{cmap}_r']:
                 plot_grid_search(
                     fp.pcr_b, fp.pts_a, *ret,
-                    inverse=True, save=True, title=cm,
+                    inverse_loss=True, save=True, title=cm,
                     plot3d_kwargs=dict(cmap=cm)
                 )
     # pick_cmap()
@@ -530,28 +550,19 @@ if __name__ == '__main__':
             (pcr_kuka, pts_hsr),
             labels=lbs,
             reverse=True,
-            # precision=dict(tsl=0.25, angle=1/20),
-            angle_range=(0, 1),
+            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1)))
         )
-        for i in ret:
-            ic(i.shape)
+        # for i in ret:
+        #     ic(i.shape)
         plot_grid_search(
             pts_hsr, pcr_kuka, *ret,
-            inverse=True,
+            inverse_loss=True,
+            inverse_pts=True,
             interp=False,
             save=True,
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points in best cluster'
         )
-
-        # fp.grid_search(
-        #     plot=True,
-        #     plot_kwargs=dict(
-        #         inverse=True,
-        #         # save=True,
-        #         tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
-        #         zlabel='Normalized L2 norm from matched points in best cluster'
-        #     ))
     grid_search_clustered()
 
     def explore_visualize_reversed_icp():

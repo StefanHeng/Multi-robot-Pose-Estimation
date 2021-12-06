@@ -373,28 +373,6 @@ def plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
     )
 
 
-# class Arrow3D(FancyArrowPatch):
-#     def __init__(self, xs, ys, zs, *args, **kwargs):
-#         FancyArrowPatch.__init__(self, (0, 0), (0, 0), *args, **kwargs)
-#         self._verts3d = xs, ys, zs
-#
-#     def do_3d_projection(self, renderer=None):
-#         xs3d, ys3d, zs3d = self._verts3d
-#         xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
-#         self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
-#         return np.min(zs)
-#
-#
-# def plot_arrow3d(c1, c2, **kwargs):
-#     kwargs = dict(
-#         zorder=50,
-#         # mutation_scale=60, arrowstyle="-|>",
-#         lw=3, color='black',
-#     ) | kwargs
-#     a = Arrow3D([0, 10], [0, 0], [0, 0], **kwargs)
-#     plt.gca().add_artist(a)
-
-
 def plot_icp_result(
         src, tgt, tsf,
         title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
@@ -625,7 +603,7 @@ def get_offset(arr, frac=2**4):
 
 def plot_grid_search(
         pcr, pts, opns_x, opns_y, opns_ang, errs,
-        interp=True, inverse=False,
+        interp=True, inverse_loss=False, inverse_pts=False,
         title=None, save=False, zlabel='Loss', offset_frac=2**3,
         tsf_ideal=None,
         interp_kwargs=None,
@@ -638,13 +616,20 @@ def plot_grid_search(
 
     Plots loss against translation (x, y pair), for each setup, the angle/rotation with the lowest loss is picked
     """
+    if inverse_pts:  # Illustrate as if ICP ran in the reversed order
+        # ic(tsf_ideal, np.linalg.inv(tsf_ideal))
+        # tsf_ideal = np.linalg.inv(tsf_ideal)
+        opns_x = -opns_x[::-1]
+        opns_y = -opns_y[::-1]
+        errs = errs[::-1]
+        pcr, pts = pts, pcr
     errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
     errs_best_ang = errs_best_ang.reshape(-1, opns_x.size)  # Shape flipped for `np.meshgrid`
     d = 12
     fig, ax = plt.subplots(figsize=(d, d), subplot_kw=dict(projection='3d'))
     [X, Y], Z = np.meshgrid(opns_x, opns_y), errs_best_ang  # Negated cos lower error = better
 
-    if inverse:
+    if inverse_loss:
         Z = -Z
 
     interp_kwargs = dict(
@@ -670,7 +655,7 @@ def plot_grid_search(
     ax.contour(X, Y, Z, **kwargs_cont)
 
     cp = sns.color_palette(palette='husl', n_colors=7)
-    cp = list(reversed(cp)) if inverse else cp
+    cp = list(reversed(cp)) if inverse_loss else cp
     cs = iter(cp)
 
     plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10, alpha=0.5)
@@ -689,28 +674,26 @@ def plot_grid_search(
         wd = pts2max_dist(pcr)/2
         wd = min(ran, wd)
 
-        rect = np.array([  # A rectangle, to indicate translation
-            # [-wd/2, 0, bot],
-            # [wd/2, 0, bot],
-            # [wd/2, 0, top],
-            # [-wd/2, 0, top],
-            # [-wd / 2, 0, bot]
+        segs = np.array([
             [wd/2, 0, bot],
             [0, 0, bot],
             [0, 0, top],
             [wd/2, 0, top],
         ])
-        plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=top, zorder=ord_2d, ms=10)
-        # plot_arrow3d([0, 0, 0], [1, 2, 3])
-        rect[:, :2] = apply_tsf_2d(rect, tsf_ideal)
-        plot_points3d(rect, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
+        kwargs_origin = dict(zorder=ord_2d, ms=10)
+        plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=top, **kwargs_origin)
+        plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=bot, **kwargs_origin)
+        segs[:, :2] = apply_tsf_2d(segs, tsf_ideal)
+        plot_points3d(segs, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
 
     fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**-4)
     plt.xlabel('Translation in X (m)')
     plt.ylabel('Translation in y (m)')
     ax.set_zlabel(zlabel)
     plt.legend()
+    prec = str(tuple([opns_x[1]-opns_x[0], opns_y[1]-opns_y[0], opns_ang[1]-opns_ang[0]]))
     t = r'Loss against translation grid search, by best $\theta$'
+    t = f'{t}, precision {prec}'
     if title:
         t = f'{t}, {title}'
     plt.title(t)
