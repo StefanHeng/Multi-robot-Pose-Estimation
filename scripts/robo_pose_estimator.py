@@ -159,22 +159,28 @@ class Loss:
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, the lowest error returned among all clusters
         """
-        if labels is None:
-            def _pose_error(tsf_):
-                # ic(tsf_, src.shape)
-                # src_match, tgt_match, idxs = self.nn((extend_1s(src) @ tsl_n_angle2tsf(tsf_).T)[:, :2])
-                src_match, tgt_match, idxs = self.nn(apply_tsf_2d(src, tsl_n_angle2tsf(tsf_)))
+        def _pose_error(cluster):
+            def __pose_error(tsf_):
+                src_match, tgt_match, idxs = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)))
                 err = self.pts_match_error(src_match, tgt_match)
                 return err
             if len(tsf.shape) == 2:
-                return np.apply_along_axis(_pose_error, 1, tsf)
+                return np.apply_along_axis(__pose_error, 1, tsf)
             else:
-                return _pose_error(tsf)
+                return __pose_error(tsf)
+        if labels is None:
+            return _pose_error(src)
         else:
-            ic(labels)
-            d_clusters = {lb: pts_hsr[np.where(labels == lb)] for lb in np.unique(labels)}
-            ic(d_clusters)
-            exit(1)
+            def _get(idx, c):
+                print(f'Getting errors for cluster #{idx+1}... ')
+                return _pose_error(c)
+            clusters = [src[np.where(labels == lb)] for lb in np.unique(labels)]
+            ic(src.shape)
+            ic(len(clusters))
+            # Pick the one with the lowest loss
+            return np.stack([_get(idx, c) for idx, c in enumerate(clusters)]).min(axis=0)
+            # ic(ret.shape, ret[:5])
+            # exit(1)
 
     @staticmethod
     def pts_match_error(pts1, pts2):
@@ -191,15 +197,17 @@ class Loss:
 
 class Search:
     @staticmethod
-    def grid_search(pts, precision=None, labels=None, reverse=False):
+    def grid_search(pts, precision=None, labels=None, reverse=False, angle_range=(-1, 1)):
         """
-        # :param pcr: List of 2D points for robot A's shape
-        # :param pts: List of 2D points for laser scan from another robot B that potentially detects robot A
         :param pts: 2-tuple of list of 2D points to match, (source points, target points)
         :param precision: Dict containing precision of translation in meters and angle in radians to search
         :param labels: List of cluster assignments, for the target points
             If specified, the target points are split by clusters where matched points is computed for each cluster
-        :param reverse: If true, `pts` are treated as source and targets inversely
+        :param reverse: If true, `pts` are treated as source and targets inversely,
+            i.e. in the order (target points, source points)
+        :param angle_range: 2-tuple within range [-1, 1], the angle to search through
+            For shapes of rotational symmetry, don't need to explore entire 2pi degree space,
+                e.g. For rectangles, any range covering 1pi suffice
         :return: 4-tuple of (X translation options, Y translation options, Angle options,
             Corresponding error for each setup combination)
 
@@ -207,8 +215,8 @@ class Search:
         """
         if precision is None:
             # precision = dict(tsl=5e-1, angle=1 / 9)
-            precision = dict(tsl=1e0, angle=1 / 2)
-            # precision = dict(tsl=3e0, angle=1)
+            # precision = dict(tsl=1e0, angle=1 / 2)
+            precision = dict(tsl=3, angle=1)
         src, tgt = reversed(pts) if reverse else pts
         print(f'Grid-searching for pose estimates on ... ')
         print(f'    target of [{tgt.shape[0]}] points, and ')
@@ -224,11 +232,11 @@ class Search:
         prec_ang = precision['angle']
         opns_x = np.linspace(*x_ran, num=int((x_ran[1]-x_ran[0]) / prec_tsl+1))
         opns_y = np.linspace(*y_ran, num=int((y_ran[1]-y_ran[0]) / prec_tsl+1))
-        opns_ang = np.linspace(-1, 1, num=int(2 / prec_ang+1))[1:]
+        opns_ang = np.linspace(*angle_range, num=int(2 / prec_ang+1))[1:]
         opns = cartesian([opns_x, opns_y, opns_ang])
         print(f'    x range {x_ran}, at precision {prec_tsl} => {opns_x.size} candidates and ')
         print(f'    y range {y_ran}, at precision {prec_tsl} => {opns_y.size} candidates and ')
-        print(f'    angle with precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
+        print(f'    angle range {angle_range}, at precision {round(prec_ang, 3)} => {opns_ang.size} candidates, ')
         print(f'    for a combined [{opns.size}] candidates... ')
 
         errs = Loss(tgt).pose_error(src, opns, labels=labels)
@@ -282,7 +290,7 @@ class Icp:
             err = err_
 
             if verbose:
-                states.append((src_match, tgt_match, tsf))
+                states.append((src_match, tgt_match, tsf, err))
 
             tsf = tsf @ self.svd(src_match, tgt_match)
             src = self.src @ tsf.T
@@ -318,11 +326,14 @@ def visualize(a, b, init_tsf=np.identity(3), mode='static', **kwargs):
     ic('Initial guess', init_tsf)
     tsf, states = Icp(a, b)(tsf=init_tsf, max_iter=100, min_d_err=1e-6, verbose=True)
     plot_icp_result(extend_1s(a), b, tsf, states=states, init_tsf=init_tsf, mode=mode, **kwargs)
+    return tsf, states
 
 
 class PoseEstimator:
     """
     Various laser-based pose estimation algorithms between KUKA iiwa and HSR robot
+
+    The two robots should potentially detect each other
     """
 
     def __init__(self):
@@ -392,12 +403,13 @@ if __name__ == '__main__':
         )
     # icp_sanity_check()
 
-    ptc_kuka = get_kuka_pointcloud()
+    pcr_kuka = get_kuka_pointcloud()
     pts_hsr = eg_hsr_scan()
+    tsf_ideal = tsl_n_angle2tsf(config('heuristics.pose_guess.actual_pose'))
 
     def check_icp_hsr():
         # Empirically have `robot_a` as HSR, `robot_b` as KUKA
-        fp = PoseEstimator.FusePose(pcr_b=ptc_kuka)
+        fp = PoseEstimator.FusePose(pcr_b=pcr_kuka)
         ic(fp.pcr_b.shape)
 
         title = 'default init from KUKA shape, good translation guess'
@@ -407,7 +419,7 @@ if __name__ == '__main__':
             [0, 0, 1]
         ])
         visualize(
-            ptc_kuka, pts_hsr, init_tsf=init_tsf,
+            pcr_kuka, pts_hsr, init_tsf=init_tsf,
             title=title, save=False,
             xlim=[-2, 6], ylim=[-2, 2],
             mode='static'
@@ -445,16 +457,16 @@ if __name__ == '__main__':
         lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
         d_clusters = {lb: pts_hsr[np.where(lbs == lb)] for lb in np.unique(lbs)}
 
-        cls = d_clusters[11]  # The cluster indicating real location of KUKA
+        pts_cls = d_clusters[11]  # The cluster indicating real location of KUKA
 
         # visualize(
-        #     ptc_kuka, cls,
+        #     ptc_kuka, pts_cls,
         #     title='HSR locates KUKA, from the real cluster',
-        #     init_tsf=tsl_n_angle2tsf(tsl=cls.mean(axis=0)),
+        #     init_tsf=tsl_n_angle2tsf(tsl=pts_cls.mean(axis=0)),
         #     xlim=[-2, 6], ylim=[-2, 3], mode='control', save=False
         # )
         visualize(
-            ptc_kuka, cls,
+            pcr_kuka, pts_cls,
             title='HSR locates KUKA, from the real cluster, good translation estimate',
             init_tsf=tsl_n_angle2tsf(tsl=[2.5, -0.5]),
             xlim=[-1, 5], ylim=[-2, 2], mode='control',
@@ -463,22 +475,24 @@ if __name__ == '__main__':
     # icp_after_cluster()
 
     def grid_search():
-        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
-        fp.grid_search(
+        ret = Search.grid_search(
+            (pcr_kuka, pts_hsr),
             # precision=dict(tsl=0.25, angle=1/20),
-            plot=True,
-            plot_kwargs=dict(
-                inverse=True,
-                # save=True,
-                tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
-                zlabel='Normalized L2 norm from matched points',
-                # interp=False,
-                interp_kwargs=dict(
-                    # method='linear',
-                    # factor=2**2
-                )
-            ))
-    grid_search()
+            angle_range=(0, 1)
+        )
+        plot_grid_search(
+            pcr_kuka, pts_hsr, *ret,
+            inverse=True,
+            # save=True,
+            tsf_ideal=tsf_ideal,
+            zlabel='Normalized L2 norm from matched points',
+            # interp=False,
+            interp_kwargs=dict(
+                # method='linear',
+                # factor=2**2
+            )
+        )
+    # grid_search()
 
     def pick_cmap():
         cmaps = [
@@ -496,7 +510,7 @@ if __name__ == '__main__':
             'twilight',
             'twilight_shifted'
         ]
-        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
+        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=pcr_kuka)
         ret = fp.grid_search()
         for cmap in cmaps:
             ic(cmap)
@@ -509,17 +523,51 @@ if __name__ == '__main__':
     # pick_cmap()
 
     def grid_search_clustered():
-        fp = PoseEstimator.FusePose(pts_a=pts_hsr, pcr_b=ptc_kuka)
-
         # A good clustering result
         lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
-        fp.grid_search(
-            plot=True,
+
+        ret = Search.grid_search(
+            (pcr_kuka, pts_hsr),
             labels=lbs,
-            plot_kwargs=dict(
-                inverse=True,
-                # save=True,
-                tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
-                zlabel='Normalized L2 norm from matched points in best cluster'
-            ))
-    # grid_search_clustered()
+            reverse=True,
+            # precision=dict(tsl=0.25, angle=1/20),
+            angle_range=(0, 1),
+        )
+        for i in ret:
+            ic(i.shape)
+        plot_grid_search(
+            pts_hsr, pcr_kuka, *ret,
+            inverse=True,
+            interp=False,
+            save=True,
+            tsf_ideal=tsf_ideal,
+            zlabel='Normalized L2 norm from matched points in best cluster'
+        )
+
+        # fp.grid_search(
+        #     plot=True,
+        #     plot_kwargs=dict(
+        #         inverse=True,
+        #         # save=True,
+        #         tsf_ideal=tsl_n_angle2tsf(tsl=[2.5, -0.75], theta=-0.15),
+        #         zlabel='Normalized L2 norm from matched points in best cluster'
+        #     ))
+    grid_search_clustered()
+
+    def explore_visualize_reversed_icp():
+        # A good cluster
+        lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
+        d_clusters = {lb: pts_hsr[np.where(lbs == lb)] for lb in np.unique(lbs)}
+        pts_cls = d_clusters[11]
+
+        x, y = config('heuristics.pose_guess.good_no_rotation')
+        tsf, states = visualize(
+            pts_cls, pcr_kuka,
+            title='HSR locates KUKA, from the real cluster, good translation estimate, reversed',
+            init_tsf=tsl_n_angle2tsf([-x, -y]),
+            # xlim=[-2, 6], ylim=[-2, 3], mode='static',
+            # save=True
+        )
+        tsf_rev = np.linalg.inv(tsf)  # Looks like
+        plot_icp_result(pcr_kuka, pts_cls, tsf_rev, init_tsf=tsl_n_angle2tsf([x, y]))
+    # explore_visualize_reversed_icp()

@@ -1,0 +1,7 @@
+numpy~=1.21.3
+icecream~=2.1.1
+scipy~=1.7.2
+matplotlib~=3.5.0
+seaborn~=0.11.2
+Pint~=0.18
+scikit-learn~=1.0.1

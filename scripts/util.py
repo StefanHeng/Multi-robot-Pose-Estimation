@@ -8,10 +8,11 @@ from collections.abc import Iterable
 
 import numpy as np
 import scipy.interpolate
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Ellipse
 from matplotlib import transforms, rcParams
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle, Ellipse, FancyArrowPatch
 from matplotlib.widgets import Button
+from mpl_toolkits.mplot3d import proj3d
 import seaborn as sns
 import pint
 from icecream import ic
@@ -372,6 +373,28 @@ def plot_line_seg_arrow(c1, c2, r=0.01, **kwargs):
     )
 
 
+# class Arrow3D(FancyArrowPatch):
+#     def __init__(self, xs, ys, zs, *args, **kwargs):
+#         FancyArrowPatch.__init__(self, (0, 0), (0, 0), *args, **kwargs)
+#         self._verts3d = xs, ys, zs
+#
+#     def do_3d_projection(self, renderer=None):
+#         xs3d, ys3d, zs3d = self._verts3d
+#         xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+#         self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
+#         return np.min(zs)
+#
+#
+# def plot_arrow3d(c1, c2, **kwargs):
+#     kwargs = dict(
+#         zorder=50,
+#         # mutation_scale=60, arrowstyle="-|>",
+#         lw=3, color='black',
+#     ) | kwargs
+#     a = Arrow3D([0, 10], [0, 0], [0, 0], **kwargs)
+#     plt.gca().add_artist(a)
+
+
 def plot_icp_result(
         src, tgt, tsf,
         title=None, save=False, states=None, xlim=None, ylim=None, with_arrow=True,
@@ -399,7 +422,7 @@ def plot_icp_result(
         for s_, t_ in zip(src__, tgt__):
             plot_line_seg(s_, t_, with_arrow=with_arrow, **kwargs)
 
-    N_STT = len(states)
+    N_STT = (states and len(states)) or 0
 
     x_rang, y_rang = (
         abs(xlim[0] - xlim[1]), abs(ylim[0] - ylim[1])
@@ -419,7 +442,7 @@ def plot_icp_result(
     plt.gca().set_aspect('equal')
 
     def _step(idx_, t_):
-        tsf_ = states[idx_][-1] if states else tsf
+        tsf_ = states[idx_][2] if states else tsf
         plt.cla()
         if xlim:
             plt.xlim(xlim)
@@ -445,8 +468,8 @@ def plot_icp_result(
         c = next(cs)
         plot_points(src, c=c, alpha=0.5, label='Source points')
         if not np.array_equal(init_tsf, np.identity(3)):
-            plot_points(src @ init_tsf.T, c=c, alpha=0.5, label='Source points, initial guess')
-        plot_points(src @ tsf_.T, c=c, label='Source points, transformed')
+            plot_points(apply_tsf_2d(src, init_tsf), c=c, alpha=0.5, label='Source points, initial guess')
+        plot_points(apply_tsf_2d(src, tsf_), c=c, label='Source points, transformed')
         plot_points(tgt, c=next(cs), label='Target points')
 
         c = next(cs)
@@ -611,6 +634,8 @@ def plot_grid_search(
     """
     Plot grid search result per `PoseEstimator.FusePose`, i.e. for the get-pose first approach
 
+    The 3 search spaces, `opns_x`, `opns_y`, `opns_ang`, should be uniformly sampled and increasing numbers
+
     Plots loss against translation (x, y pair), for each setup, the angle/rotation with the lowest loss is picked
     """
     errs_best_ang = np.min(errs.reshape(-1, opns_ang.size), axis=-1)
@@ -648,7 +673,7 @@ def plot_grid_search(
     cp = list(reversed(cp)) if inverse else cp
     cs = iter(cp)
 
-    plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10)
+    plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10, alpha=0.5)
     plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label='Laser scan, target')
     c = next(cs)
     plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
@@ -660,15 +685,23 @@ def plot_grid_search(
         )
 
         bot, top = get_offset(Z, frac=offset_frac/1.25)
+        ran = max(opns_x[-1] - opns_x[0], opns_y[-1] - opns_y[0]) / 2**4
         wd = pts2max_dist(pcr)/2
+        wd = min(ran, wd)
 
         rect = np.array([  # A rectangle, to indicate translation
-            [-wd/2, 0, bot],
+            # [-wd/2, 0, bot],
+            # [wd/2, 0, bot],
+            # [wd/2, 0, top],
+            # [-wd/2, 0, top],
+            # [-wd / 2, 0, bot]
             [wd/2, 0, bot],
+            [0, 0, bot],
+            [0, 0, top],
             [wd/2, 0, top],
-            [-wd/2, 0, top],
-            [-wd / 2, 0, bot]
         ])
+        plot_points([tsf2tsl_n_angle(tsf_ideal)[0]], zs=top, zorder=ord_2d, ms=10)
+        # plot_arrow3d([0, 0, 0], [1, 2, 3])
         rect[:, :2] = apply_tsf_2d(rect, tsf_ideal)
         plot_points3d(rect, zorder=ord_2d, c='black', ls='dashed', lw=1, label='Actual pose indicator')
 
@@ -681,7 +714,6 @@ def plot_grid_search(
     if title:
         t = f'{t}, {title}'
     plt.title(t)
-    # fig.suptitle(t)
     save_fig(save, t)
     plt.show()
 
@@ -709,4 +741,4 @@ if __name__ == '__main__':
         plt.show()
 
     # ic(config('dimensions.KUKA.length'))
-    ic(cartesian([[1, 2, 3], [4, 5], [6, 7]]))
+    # ic(cartesian([[1, 2, 3], [4, 5], [6, 7]]))
