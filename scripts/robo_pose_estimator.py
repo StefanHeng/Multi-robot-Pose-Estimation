@@ -513,39 +513,66 @@ class TsfInitializer:
         theta = math.atan(coef)
         theta_comp = math.pi/2-theta
         x, y = center
-        ln, wd = rect_dim['length'], rect_dim['width'] if isinstance(rect_dim, dict) else rect_dim
-        hypot = np.linalg.norm(np.array([ln, wd]), ord=2)  # hypotenuse
-        ic(hypot)
-        l, w = ln/2, wd/2
-        ic(coef, center, ln, wd)
-        # coef = 1/coef
-        offsets = []
 
-        bl = (x - w*math.cos(theta), y - w*math.sin(theta))  # Bottom left corner
-        x_tl, y_tl = (x + w*math.cos(theta), y + w*math.sin(theta))  # x and y for top left corner
-        tr = (x_tl + ln*math.cos(theta_comp), y_tl - ln*math.sin(theta_comp))
-        ic(bl, tr)
-        rect_cent = np.mean(np.array([bl, tr]), axis=0)
-        ic(rect_cent)
-        pcr_rect = get_rect_pointcloud(rect_dim)
-        tsf = tsl_n_angle2tsf(tsl=rect_cent, theta=-theta_comp)
+        ln_, wd_ = rect_dim['length'], rect_dim['width'] if isinstance(rect_dim, dict) else rect_dim
+        hypot = np.linalg.norm(np.array([ln_, wd_]), ord=2)  # hypotenuse
 
-        cs = iter(sns.color_palette(palette='husl', n_colors=7))
-        cand = 'Rect centroid candidate'
-        diff_x_seg, diff_y_seg = hypot*math.cos(theta), hypot*math.sin(theta)
-        plt.figure(figsize=(16, 9))
-        plot_points(np.array([
-            [x-diff_x_seg, y-diff_y_seg],
-            [x+diff_x_seg, y+diff_y_seg]
-        ]), c=next(cs), label='Line segment')
-        plot_points([center], ms=8, c=next(cs), label='Line segment center')
-        plot_points([bl], ms=8, c=next(cs), label='bottom left')
-        plot_points([tr], ms=8, c=next(cs), label='top right')
-        plot_points([rect_cent], ms=8, c=next(cs), label=cand)
-        plot_points(apply_tsf_2d(pcr_rect, tsf), c=next(cs), label='Line segment')
-        plt.legend()
-        plt.gca().set_aspect('equal')
-        plt.show()
+        def _get(ln, wd):
+            # ic(hypot)
+            flipped = abs(ln) < abs(wd)
+            l, w = ln/2, wd/2
+            # ic(coef, center, ln, wd)
+            # coef = 1/coef
+            # offsets = []
+
+            bl = (x - w*math.cos(theta), y - w*math.sin(theta))  # Bottom left corner
+            x_tl, y_tl = (x + w*math.cos(theta), y + w*math.sin(theta))  # x and y for top left corner
+            tr = (x_tl + ln*math.cos(theta_comp), y_tl - ln*math.sin(theta_comp))
+            # ic(bl, tr)
+            rect_cent = np.mean(np.array([bl, tr]), axis=0)
+            # ic(rect_cent)
+            pcr_rect = get_rect_pointcloud(rect_dim)
+            tsf = tsl_n_angle2tsf(tsl=rect_cent, theta=theta if flipped else -theta_comp)
+
+            return pcr_rect, tsf
+
+        # cands = [_get(ln_, wd_), _get(wd_, ln_)]
+        # cands = _get(ln_, wd_)
+        # cands = _get(wd_, ln_)
+        # cands = _get(-ln_, -wd_)
+        # cands = _get(-wd_, -ln_)
+        cands = [
+            _get(ln_, wd_),
+            _get(wd_, ln_),
+            _get(-ln_, -wd_),
+            _get(-wd_, -ln_)
+        ]
+
+        if plot:
+            cs = iter(sns.color_palette(palette='husl', n_colors=7))
+            cand = 'Rect centroid candidate'
+            diff_x_seg, diff_y_seg = hypot * math.cos(theta), hypot * math.sin(theta)
+            fig = plt.figure(figsize=(8, 8))
+            plot_points(np.array([
+                [x - diff_x_seg, y - diff_y_seg],
+                [x, y],
+                [x + diff_x_seg, y + diff_y_seg]
+            ]), ms=2**3, c=next(cs), label='Line segment')
+            # plot_points([center], ms=8, c=next(cs), label='Line segment center')
+            # plot_points([bl], ms=8, c=next(cs), label='bottom left')
+            # plot_points([tr], ms=8, c=next(cs), label='top right')
+            # plot_points([rect_cent], ms=8, c=next(cs), label=cand)
+            # plot_points(apply_tsf_2d(pcr_rect, tsf), c=next(cs), label='Line segment')
+            ic(len(cands[0]))
+            for idx, (pcr_rect, tsf) in enumerate(cands):
+                plot_points(apply_tsf_2d(pcr_rect, tsf), c=next(cs), label=f'Rectangle candidate {idx+1}')
+            plt.legend()
+            zoom = 2
+            # ic(fig.get_x_data())
+            # w, h = fig.get_size_inches()
+            # fig.set_size_inches(w * zoom, h * zoom)
+            plt.gca().set_aspect('equal', 'box')
+            plt.show()
 
 
 class PoseEstimator:
