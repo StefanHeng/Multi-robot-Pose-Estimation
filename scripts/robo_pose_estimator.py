@@ -427,14 +427,15 @@ class TsfInitializer:
     def __init__(self, pts):
         self.pts = pts
 
-    def ransac_linear(self, labels=None, plot=False, reverse=False):
+    def ransac_linear(self, labels=None, plot=False, reverse=False, return_ln=False):
         """
         Fit the set of points linearly
 
         :param labels: If given, `pts` are first separated, and RANSAC is performed on each cluster
+        :param reverse: If reversed, the independent and dependent axis in `pts` are flipped
         :param plot: If true, the result is visualized
             Allowed only for single cluster
-        :param reverse: If reversed, the independent and dependent axis in `pts` are flipped
+        :param return_ln: If true, the fitted RANSAC line is returned as array of start & end points
         :return: 2-tuple of (coefficient, centroid in the range of inlier points), or list of them
         """
         def _ransac_linear(cluster):
@@ -455,32 +456,32 @@ class TsfInitializer:
             x_ = np.linspace(x_in.min(), x_in.max(), num=2)[:, np.newaxis]
             y_ = ransac.predict(x_)
             center = [x_.mean(), y_.mean()]
+            end_pts = [x_, y_]
             if reverse:
+                end_pts.reverse()
                 center.reverse()
 
             if labels is None and plot:
                 outlier_mask = np.logical_not(inlier_mask)
                 outliers = cluster[outlier_mask]
-                regr = [x_, y_]
                 ins = np.array([x_in, y_in]).T
                 outs = np.array([outliers[:, 0], outliers[:, 1]]).T
                 center_in = inliers.mean(axis=0)
                 if reverse:
-                    regr.reverse()
                     ins[:] = ins[:, ::-1]
                     outs[:] = outs[:, ::-1]
                     center_in[:] = center_in[::-1]
-
                 d = 9
                 ratio = (y.max()-y.min()) / (x.max()-x.min())
                 ratio = clipper(2**-2, 2**2)(ratio)
+                # ic(ratio)
                 plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
                 cs = iter(sns.color_palette(palette='husl', n_colors=7))
                 plot_points(ins, c=next(cs), label='Inliers')
                 plot_points(outs, c=next(cs), label='Outliers')
                 plot_points([center_in], ms=8, c=next(cs), label='Centroid or inliers')
                 plot_points([center], ms=8, c=next(cs), label='Centroid of regression')
-                plt.plot(*regr, lw=0.5, c=next(cs), label='Regression')
+                plt.plot(*end_pts, lw=0.5, c=next(cs), label='Regression')
 
                 plt.gca().set_aspect('equal')
                 plt.legend()
@@ -489,15 +490,18 @@ class TsfInitializer:
             coef = ransac.estimator_.coef_
             assert coef.size == 1
             coef = coef[0][0]
-            return 1/coef if reverse else coef, center
+            ret = [(1/coef if reverse else coef), center]
+            if return_ln:
+                ret.append(end_pts)
+            return tuple(ret)
         if labels is None:
             return _ransac_linear(self.pts)
         else:
-            d_cls = {lb: self.pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
+            d_cls = {lb: self.pts[np.where(labels == lb)] for lb in np.unique(labels)}
             return {lb: _ransac_linear(c) for lb, c in d_cls.items()}
 
     @staticmethod
-    def propose_rect_tsf(line_seg, rect_dim, return_mat=True, plot=False):
+    def propose_rect_tsf(line_seg, rect_dim=config('dimensions.KUKA'), return_mat=True, plot=False, no_flip=False):
         """
         Given a line segment, propose possible transformations such that
             the rectangle, transformed from centroid of origin, matches the line segment
@@ -507,6 +511,8 @@ class TsfInitializer:
         :return: List of transformations
         :param return_mat: If false, returns 3-tuple of (translation_x, translation_y, rotation angle);
             Otherwise, returns transformation matrices
+        :param no_flip: If true, only 2 of the 4 cases which are distinct 90 degree rotations are returned
+            Intended for illustration purposes
         :param plot: If true, the result is visualized
         """
         coef, center = line_seg
@@ -524,12 +530,16 @@ class TsfInitializer:
             tr = (x_tl + ln*math.cos(theta_comp), y_tl - ln*math.sin(theta_comp))
             rect_cent = np.mean(np.array([bl, tr]), axis=0)
             return get_rect_pointcloud(rect_dim), tuple([*rect_cent, theta if flipped else -theta_comp])
-        cands = [
-            _get(ln_, wd_),
-            _get(wd_, ln_),
-            _get(-ln_, -wd_),
-            _get(-wd_, -ln_)
+
+        args = [
+            (ln_, wd_),
+            (wd_, ln_),
+            (-ln_, -wd_),
+            (-wd_, -ln_)
         ]
+        if no_flip:
+            args = args[:2]
+        cands = [_get(*a) for a in args]
 
         if plot:
             hypot = np.linalg.norm(np.array([ln_, wd_]), ord=2)  # hypotenuse
@@ -748,6 +758,7 @@ if __name__ == '__main__':
                 )
     # pick_cmap()
 
+    dim_kuka = config('dimensions.KUKA')
     d_cls_res = config('heuristics.cluster_results.good')
     lbs = d_cls_res['labels']
     d_clusters = d_cls_res['clusters']
@@ -839,9 +850,9 @@ if __name__ == '__main__':
     # check_pose_error_plot()
 
     def check_ransac():
-        pts_cls = d_clusters[11]
+        pts_cls = d_clusters[13]
         ti = TsfInitializer(pts_cls)
-        coef, center = ti.ransac_linear(plot=True, reverse=False)
+        coef, center = ti.ransac_linear(plot=True, reverse=True)
         ic(coef, center, type(coef), coef.shape)
         ic(coef, math.degrees(math.atan(coef)), center)
     # check_ransac()
@@ -850,5 +861,46 @@ if __name__ == '__main__':
         pts_cls = d_clusters[11]
         ti = TsfInitializer(pts_cls)
         coef, center = ti.ransac_linear()
-        ic(ti.propose_rect_tsf((coef, center), config('dimensions.KUKA'), plot=True, return_mat=False))
-    check_init_proposal()
+        ic(ti.propose_rect_tsf((coef, center), dim_kuka, plot=True, return_mat=False))
+    # check_init_proposal()
+
+    def visualize_proposals():
+        ti = TsfInitializer(pts_hsr)
+
+        n_cls = len(d_clusters)
+        cp = sns.color_palette(palette='husl', n_colors=n_cls)
+        cs = iter(cp)
+        plt.figure(figsize=(9, 9))
+        plot_cluster(
+            pts_hsr, lbs,
+            cls_kwargs=[dict(label='Cluster', c=c) for c in cp],
+            new_fig=False, show_eclipse=True,
+            line_kwargs=dict(alpha=0.4, c=next(cs))
+        )
+        for r in [False, True]:
+            cp = sns.color_palette(palette='husl', n_colors=n_cls)
+            cs = iter(cp)
+            for idx, (lb, (coef, center, end_pts)) in enumerate(
+                    ti.ransac_linear(labels=lbs, reverse=r, return_ln=True).items()
+            ):
+                c = next(cs)
+                plt.plot(*end_pts, lw=1, c=c, label='Regression' + (', reversed' if r else ''))
+
+                tsfs = ti.propose_rect_tsf((coef, center), dim_kuka, no_flip=True)
+                # label = idx
+                # pts_cls = d_clusters[label]
+                for tsf in tsfs:
+                    plot_points(
+                        apply_tsf_2d(pcr_kuka, tsf),
+                        lw=0.2, ms=0.2, alpha=0.3, c=c, label=f'Rectangle candidates'
+                    )
+
+        plt.gca().set_aspect('equal')
+        handles, labels_ = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels_, handles))
+        plt.legend(by_label.values(), by_label.keys())
+        # plt.legend()
+        plt.title('Transformation proposals on HSR scan cluster, without flipping')
+
+        plt.show()
+    visualize_proposals()

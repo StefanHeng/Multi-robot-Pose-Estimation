@@ -539,22 +539,37 @@ def plot_icp_result(
         plt.show()
 
 
-def plot_cluster(data, labels, title=None, save=False, new=True, show=True, eclipse=True, line_kwargs=None):
-    d_clusters = {lb: data[np.where(labels == lb)] for lb in np.unique(labels)}
+def plot_cluster(
+        data, data_labels,
+        title=None, save=False, new_fig=True, show_eclipse=True, line_kwargs=None,
+        cls_kwargs=None
+):
+    d_clusters = {lb: data[np.where(data_labels == lb)] for lb in np.unique(data_labels)}
 
     cs = iter(sns.color_palette(palette='husl', n_colors=len(d_clusters) + 1))
     x, y = data[:, 0], data[:, 1]
-    if new:
+    if new_fig:
         fig, ax = plt.subplots(figsize=(12, 12 / np.ptp(x) * np.ptp(y)), constrained_layout=True)
     else:
         ax = plt.gca()
     # ic(ex)
+    if line_kwargs is None:
+        line_kwargs = dict()
     plt.plot(x, y, **(dict(marker='o', ms=0.3, lw=0.25, c=next(cs), alpha=0.5, label='Whole') | line_kwargs))
     line_kwargs = dict(
         marker='o', ms=0.4, lw=0.25
-    ) | line_kwargs if line_kwargs is not None else dict()
+    ) | line_kwargs
 
-    for lb, d in d_clusters.items():
+    # if cls_kwargs is not None:  # Kwargs for each cluster
+
+    # labels = None, colors = None
+    # if labels is not None and not isinstance(labels, list):
+    #     labels = [labels] * len(data_labels)
+    # labels = None, colors = None
+    if cls_kwargs is not None and not isinstance(cls_kwargs, list):
+        cls_kwargs = [cls_kwargs] * len(data_labels)
+
+    for idx, (lb, d) in enumerate(d_clusters.items()):
         x_, y_ = d[:, 0], d[:, 1]
         c = next(cs)
 
@@ -583,21 +598,23 @@ def plot_cluster(data, labels, title=None, save=False, new=True, show=True, ecli
             ellipse.set_transform(tsf + ax.transData)
             return ax.add_patch(ellipse)
 
-        if eclipse and lb != -1:  # Noise as in DBSCAN
+        if show_eclipse and lb != -1:  # Noise as in DBSCAN
             confidence_ellipse(n_std=1.25, fc=c, alpha=0.25)
 
+        # lb = labels[idx] if labels is not None else f'Cluster {lb + 1}'
         lb = f'Cluster {lb + 1}'
-        ax.plot(x_, y_, **(dict(c=c, label=lb) | line_kwargs))
+        cls_kwarg = (cls_kwargs is not None and cls_kwargs[idx]) or dict()
+        ax.plot(x_, y_, **(dict(c=c, label=lb) | line_kwargs | cls_kwarg))
 
-    t = 'Clustering results'
-    if title:
-        t = f'{t}, {title}'
-    plt.title(t)
-    plt.legend()
-    if not hasattr(ax, 'get_zlim'):  # Not supported in 3D projection
-        ax.set_aspect('equal')
-    save_fig(save, t)
-    if show:
+    if new_fig:
+        t = 'Clustering results'
+        if title:
+            t = f'{t}, {title}'
+        plt.title(t)
+        plt.legend()
+        if not hasattr(ax, 'get_zlim'):  # Not supported in 3D projection
+            ax.set_aspect('equal')
+        save_fig(save, t)
         plt.show()
 
 
