@@ -114,28 +114,17 @@ class Loss:
             Finds nearest neighbors in the target
             """
             dist, idxs_ = self.tree_tgt.query(src[:, :2])
-            # ic(idxs_, dist)
-            # if np.isinf(dist).all():
-            #     return None
-            # else:
-            #     ic(idxs_, dist)
-            # ic(src.shape)
-            # ic(src.shape, src[0], self.tgt.shape)
-            # exit(1)
             # Keep pairs with distinct target points by removing pairs with larger distance
             idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
             arg_idxs = dist.argsort()
             idxs_pair_sort = idxs_pair[arg_idxs]
             idxs_sort = idxs_[arg_idxs]
-            # dist_sort = dist[arg_idxs]
 
             def arr_idx(a, v):
                 """
                 :return: 1st occurrence index of `v` in `a`, a numpy 1D array
                 """
                 return np.where(a == v)[0][0]
-
-            # arr_idx(idxs_sort)
 
             def _get_idx(arr):
                 def _get(i):
@@ -149,21 +138,6 @@ class Loss:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
-            # ic(idxs_pair_uniq)
-            # hose with distance beyond upperbound, will have target index of `self.n` => Prune
-            # idxs_pair_uniq = idxs_pair_uniq[idxs_pair_uniq[:, 1] < self.n]
-            # ic(idxs_pair_uniq)
-            # exit(1)
-
-            # idx = idxs_pair_uniq[0]
-            # ic(idxs_pair_uniq)
-            # pt1, pt2 = src[idx[0]], self.tgt[idx[1]]
-            # ic(pt1, pt2)
-            # ic(np.linalg.norm(pt1-pt2, ord=2))
-            # ic(dist[idx[0]])
-            # ic(idxs_pair_uniq[:20], idxs_pair_uniq.shape)
-            # ic(dist_sort[:20])
-            # exit(1)
             ret = [
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
@@ -177,12 +151,16 @@ class Loss:
         """
         :param tgt: List of 2d points, a base set of points to compute loss
         """
-        # ic(tgt.shape)
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
-    def pose_error(self, src, tsf, labels=None, bias=False, n=2, plot=False):
+    def pose_error(self, src, tsf, labels=None, bias=False, n=2, plot=False, dist_thresh=inf, cls_frac=-inf,
+                   adjust_inf=True):
         """
+        :param adjust_inf: If true, loss of infinity are set to a value below global minimum
+        :param cls_frac: Threshold for fraction of points matched relative to cluster size,
+            if smaller, error is set to infinity
+        :param dist_thresh: Threshold for minimum distance between matched points, if larger, error is set to infinity
         :param src: List of 2d points to match target points
         :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
             or list of proposed translations
@@ -196,28 +174,27 @@ class Loss:
         """
         src = np.asarray(src)
         tsf = np.asarray(tsf)
-        # ic(tsf)
+
+        def adjust(arr):
+            from numpy import inf
+            arrs_ = arr[arr != inf]
+            ma, mi = arrs_.max(), arrs_.min()
+            # ic(ma)
+            # ic(np.where(errs == inf))
+            arr[arr == inf] = ma + (ma-mi) / 2**4
 
         def _pose_error(cluster):
-            num = cluster.shape[0] * 0.25
+            num = cluster.shape[0] * cls_frac
+
             def __pose_error(tsf_):
-                # ic(tsf_)
-                # tsf_ = np.array([-3.75, -1.5, 1.])
                 ret = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
-                # if ret is None:
-                #     return float('inf')
                 src_mch, tgt_mch, idxs, dist = ret
-                # dist[0] is the smallest value
-                if dist[0] > 2 or idxs.shape[0] < num:
-                    return float('inf')
-                # ic(tsf_, dist.shape, dist[:5])
+                if dist[0] > dist_thresh or idxs.shape[0] < num:  # dist[0] is the smallest value
+                    return inf
                 err = self.pts_match_error(src_mch, tgt_mch, n=n)
-                # ic(idxs.shape[0], err / (idxs.shape[0]**2))
-                # exit(1)
-                return err / (idxs.shape[0]) if bias else err
+                return err / math.sqrt(idxs.shape[0]) if bias else err
             if len(tsf.shape) == 2:
                 return np.apply_along_axis(__pose_error, 1, tsf)
-                # exit(1)
             else:
                 err = __pose_error(tsf)
                 return err
@@ -227,22 +204,20 @@ class Loss:
                 src_mch_, tgt_mch_, _ = self.nn(src_)
                 plot_2d([src_, self.tgt], label=['Source points, transformed', 'Target points'], show=False)
                 for s, t in zip(src_mch_, tgt_mch_):
-                    # ic(s, t)
                     plot_line_seg(s, t)
                 plt.show()
-            return _pose_error(src)
+            errs = _pose_error(src)
+            adjust(errs)
+            return errs
         else:
             def _get(idx, c):
                 print(f'{now()}| Getting errors for cluster #{idx+1}... ')
                 return _pose_error(c)
             label_idxs = {lb: idx for idx, lb in enumerate(np.unique(labels))}
-            # ic(label_idxs)
             clusters = [src[np.where(labels == lb)] for lb in label_idxs]
-            # Pick the one with the lowest loss
             errs = np.stack([_get(idx, c) for idx, c in enumerate(clusters)])
-            # ic(errs.shape)
+            adjust(errs)
             return label_idxs, errs.T
-            # return np.stack([_get(idx, c) for idx, c in enumerate(clusters)]).min(axis=0)
 
     @staticmethod
     def pts_match_error(pts1, pts2, n=2):
@@ -251,7 +226,6 @@ class Loss:
             normalized by number points
         """
         n = np.linalg.norm(pts1[:, :2] - pts2[:, :2], ord=n, axis=1)
-        # ic(n)
         return n.mean()
 
 
@@ -336,13 +310,7 @@ class Search:
             with open(fnm, 'wb') as handle:
                 pickle.dump(d, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 print(f'{now()}| Grid search result written to pickle ')
-        ic(errs)
-
-        from numpy import inf
-        ma = errs[errs != inf].max()
-        ic(ma)
-        ic(np.where(errs == inf))
-        errs[errs == inf] = ma
+        # ic(errs)
 
         return opns_x, opns_y, opns_ang, ((label_idxs, errs) if has_label else errs)
 
@@ -637,7 +605,8 @@ if __name__ == '__main__':
             reverse=True,
             save=True,
             # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
-            err_kwargs=dict(labels=lbs, bias=False, n=2)
+            # grid=dict(precision=dict(tsl=0.25, angle=1 / 20), range=dict(angle=(0, 1))),
+            err_kwargs=dict(labels=lbs, bias=False, n=2, dist_thresh=2, cls_frac=0.25),
         )
         plot_grid_search(
             pts_hsr, pcr_kuka, *ret,
@@ -651,8 +620,27 @@ if __name__ == '__main__':
             # interp_kwargs=dict(method='linear')
         )
     # grid_search_clustered()
-    import cProfile
-    cProfile.run('grid_search_clustered()')
+    # cProfile.run('grid_search_clustered()')
+
+    import cProfile, pstats
+    profiler = cProfile.Profile()
+    profiler.enable()
+    grid_search_clustered()
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats('cumtime')
+    stats.print_stats()
+    import cProfile, pstats, io
+    from pstats import SortKey
+
+    # pr = cProfile.Profile()
+    # pr.enable()
+    # grid_search_clustered()
+    # pr.disable()
+    # s = io.StringIO()
+    # sortby = SortKey.CUMULATIVE
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+    # print(s.getvalue())
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -673,7 +661,7 @@ if __name__ == '__main__':
     # explore_visualize_reversed_icp()
 
     def check_grid_search_cluster():
-        fnm = 'gird-search, [(-5, 5), (-5, 5), 0.25], [(0, 1), 0.05], 2021-12-06 17:41:30.pickle'
+        fnm = 'gird-search, [(-5, 5), (-5, 5), 0.25], [(0, 1), 0.05], 2021-12-06 22:54:01.pickle'
         with open(fnm, 'rb') as handle:
             d = pickle.load(handle)
             opns_x = d['options_x']

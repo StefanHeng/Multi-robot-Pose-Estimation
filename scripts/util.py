@@ -25,6 +25,8 @@ rcParams['font.size'] = 12
 sns.set_style('darkgrid')
 
 
+inf = float('inf')
+
 reg = pint.UnitRegistry()
 
 
