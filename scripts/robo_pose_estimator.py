@@ -105,19 +105,24 @@ class Loss:
         Given a list of 2D query points, return the corresponding target points matched
         """
         def __init__(self, tgt):
-            self.tgt = extend_1s(tgt)
+            self.tgt = tgt
             self.tree_tgt = KDTree(tgt)
 
-        def __call__(self, src):
+        def __call__(self, src, with_dist=False):
             """
             Finds nearest neighbors in the target
             """
-            dist, idxs_ = self.tree_tgt.query(src[:, :2])
+            dist, idxs_ = self.tree_tgt.query(src[:, :2], workers=-1)
+            # ic(idxs_, dist)
+            ic(src.shape)
+            # ic(src.shape, src[0], self.tgt.shape)
+            # exit(1)
             # Keep pairs with distinct target points by removing pairs with larger distance
             idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
             arg_idxs = dist.argsort()
             idxs_pair_sort = idxs_pair[arg_idxs]
             idxs_sort = idxs_[arg_idxs]
+            # dist_sort = dist[arg_idxs]
 
             def arr_idx(a, v):
                 """
@@ -137,17 +142,30 @@ class Loss:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
-            ic(src[idxs_pair_uniq[:, 0]][:, :2])
-            return (
+
+            idx = idxs_pair_uniq[0]
+            # ic(idxs_pair_uniq)
+            pt1, pt2 = src[idx[0]], self.tgt[idx[1]]
+            # ic(pt1, pt2)
+            # ic(np.linalg.norm(pt1-pt2, ord=2))
+            # ic(dist[idx[0]])
+            # ic(idxs_pair_uniq[:20], idxs_pair_uniq.shape)
+            # ic(dist_sort[:20])
+            # exit(1)
+            ret = [
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
                 idxs_pair_uniq
-            )
+            ]
+            if with_dist:
+                ret += [dist[idxs_pair_uniq[:, 0]]]
+            return ret
 
     def __init__(self, tgt):
         """
         :param tgt: List of 2d points, a base set of points to compute loss
         """
+        ic(tgt.shape)
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
@@ -160,7 +178,7 @@ class Loss:
             If specified, the target points are split by clusters where loss is computed for each cluster
         :param bias: If true, bias transformations with more points matched linearly
         :param n: Order of norm
-        :param plot: If true, and only one option is given,
+        :param plot: If true, and only one `tsf` option is given, plot the matched points
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, 2-tuple of (label-to-index mapping, error for each cluster in the mapping order)
         """
@@ -170,34 +188,27 @@ class Loss:
 
         def _pose_error(cluster):
             def __pose_error(tsf_):
-                src_match, tgt_match, idxs = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)))
-                err = self.pts_match_error(src_match, tgt_match, n=n)
-                # ic(idxs.shape[0], self.tgt.shape[0])
-                return err * idxs.shape[0] if bias else err
+                src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
+                ic(dist.shape, dist[:5])
+                err = self.pts_match_error(src_mch, tgt_mch, n=n)
+                # ic(idxs.shape[0], err / (idxs.shape[0]**2))
+                # exit(1)
+                return err / (idxs.shape[0]**2) if bias else err
             if len(tsf.shape) == 2:
-                return np.apply_along_axis(__pose_error, 1, tsf)
+                ret = np.apply_along_axis(__pose_error, 1, tsf)
+                exit(1)
             else:
-                # ic('here')
                 err = __pose_error(tsf)
-                if plot:
-                    src_ = apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf))
-                    src_match, tgt_match, idxs = self.nn(src_)
-                    ic(idxs.shape)
-
-                    # ic(idxs)
-                    plot_2d([src_, self.tgt], label=['Source points, transformed', 'Target points'], show=False)
-                    for s, t in zip(src_match, tgt_match):
-                        ic(s, t)
-                        plot_line_seg(s, t)
-                    plt.show()
-                    # ic(src_[idxs[:, 0]][:, :2], src_match)
-                    # idxs_src, idxs_tgt = idxs[:, 0], idxs[:, 1]
-                    # ic(src[idxs_src].shape, src_match.shape)
-                    # np.testing.assert_array_equal(src[idxs_src], src_match)
-                    # exit(1)
                 return err
         if labels is None:
-            # ic('lb none')
+            if plot:
+                src_ = apply_tsf_2d(src, tsl_n_angle2tsf(tsf))
+                src_mch_, tgt_mch_, _ = self.nn(src_)
+                plot_2d([src_, self.tgt], label=['Source points, transformed', 'Target points'], show=False)
+                for s, t in zip(src_mch_, tgt_mch_):
+                    # ic(s, t)
+                    plot_line_seg(s, t)
+                plt.show()
             return _pose_error(src)
         else:
             def _get(idx, c):
@@ -219,6 +230,7 @@ class Loss:
             normalized by number points
         """
         n = np.linalg.norm(pts1[:, :2] - pts2[:, :2], ord=n, axis=1)
+        ic(n)
         # return n.sum() / (n.size**2)
         return n.mean()
 
@@ -583,18 +595,18 @@ if __name__ == '__main__':
                 )
     # pick_cmap()
 
-    # lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
     d_cls_res = config('heuristics.cluster_results.good')
     lbs = d_cls_res['labels']
     d_clusters = d_cls_res['clusters']
     d_clusters = {int(k): v for k, v in d_clusters.items()}
 
     def grid_search_clustered():
+        # ic(pcr_kuka.shape, pts_hsr.shape)
         ret = Search.grid_search(
             (pcr_kuka, pts_hsr),
             reverse=True,
-            # save=True,
-            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
+            save=True,
+            grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
             err_kwargs=dict(labels=lbs, bias=True, n=2)
         )
         plot_grid_search(
@@ -607,7 +619,7 @@ if __name__ == '__main__':
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points in best cluster'
         )
-    # grid_search_clustered()
+    grid_search_clustered()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -644,13 +656,13 @@ if __name__ == '__main__':
             opns = opns[idxs_sort]
             errs = errs[idxs_sort]
             n = 5
-            for opn, err in zip(opns[:n], errs[:n]):
-                idx = np.argmin(err)
-                ic(opn, label_idxs[idx], err[idx])
+            for opn, error in zip(opns[:n], errs[:n]):
+                idx = np.argmin(error)
+                ic(opn, label_idxs[idx], error[idx])
             ic()
-            for opn, err in zip(opns[-n:], errs[-n:]):
-                idx = np.argmin(err)
-                ic(opn, label_idxs[idx], err[idx])
+            for opn, error in zip(opns[-n:], errs[-n:]):
+                idx = np.argmin(error)
+                ic(opn, label_idxs[idx], error[idx])
     # check_grid_search_cluster()
 
     def check_pose_error_plot():
@@ -660,4 +672,4 @@ if __name__ == '__main__':
         # ic(pts_cls.shape)
         # pts =
         Loss(pcr_kuka).pose_error(pts_cls, opn, plot=True)
-    check_pose_error_plot()
+    # check_pose_error_plot()
