@@ -467,11 +467,7 @@ class TsfInitializer:
                 center_in = inliers.mean(axis=0)
                 if reverse:
                     regr.reverse()
-                    # ins.reverse()
-                    # ic(ins, ins.shape)
                     ins[:] = ins[:, ::-1]
-                    # ic(ins, ins.shape)
-                    # outs.reverse()
                     outs[:] = outs[:, ::-1]
                     center_in[:] = center_in[::-1]
 
@@ -480,13 +476,11 @@ class TsfInitializer:
                 ratio = clipper(2**-2, 2**2)(ratio)
                 plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
                 cs = iter(sns.color_palette(palette='husl', n_colors=7))
-                # plt.plot(*ins, lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
                 plot_points(ins, c=next(cs), label='Inliers')
-                # plt.plot(*outs, lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
                 plot_points(outs, c=next(cs), label='Outliers')
-                plt.plot(*regr, lw=0.5, label='Regression')
                 plot_points([center_in], ms=8, c=next(cs), label='Centroid or inliers')
                 plot_points([center], ms=8, c=next(cs), label='Centroid of regression')
+                plt.plot(*regr, lw=0.5, c=next(cs), label='Regression')
 
                 plt.gca().set_aspect('equal')
                 plt.legend()
@@ -502,9 +496,11 @@ class TsfInitializer:
             d_cls = {lb: self.pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
             return {lb: _ransac_linear(c) for lb, c in d_cls.items()}
 
-    def propose_rect_tsf(self, line_seg, rect_dim, return_mat=True, plot=False):
+    @staticmethod
+    def propose_rect_tsf(line_seg, rect_dim, return_mat=True, plot=False):
         """
-        Given a line segment, propose possible transformations such that the rectangle matches the line segment
+        Given a line segment, propose possible transformations such that
+            the rectangle, transformed from centroid of origin, matches the line segment
 
         :param line_seg: 2-tuple of (coefficient, centroid)
         :param rect_dim: 2-tuple of (length, width) of dict with keys `length` and `width`
@@ -526,20 +522,29 @@ class TsfInitializer:
         offsets = []
 
         bl = (x - w*math.cos(theta), y - w*math.sin(theta))  # Bottom left corner
-        x_tl, y_tl = (x + wd*math.cos(theta), y + wd*math.sin(theta))  # x and y for top left corner
+        x_tl, y_tl = (x + w*math.cos(theta), y + w*math.sin(theta))  # x and y for top left corner
         tr = (x_tl + ln*math.cos(theta_comp), y_tl - ln*math.sin(theta_comp))
         ic(bl, tr)
         rect_cent = np.mean(np.array([bl, tr]), axis=0)
         ic(rect_cent)
+        pcr_rect = get_rect_pointcloud(rect_dim)
+        tsf = tsl_n_angle2tsf(tsl=rect_cent, theta=-theta_comp)
 
         cs = iter(sns.color_palette(palette='husl', n_colors=7))
-        # plt.plot(rect_cent)
         cand = 'Rect centroid candidate'
         diff_x_seg, diff_y_seg = hypot*math.cos(theta), hypot*math.sin(theta)
-        plt.plot([x-diff_x_seg, x+diff_x_seg], [y-diff_y_seg, y+diff_y_seg])
+        plt.figure(figsize=(16, 9))
+        plot_points(np.array([
+            [x-diff_x_seg, y-diff_y_seg],
+            [x+diff_x_seg, y+diff_y_seg]
+        ]), c=next(cs), label='Line segment')
+        plot_points([center], ms=8, c=next(cs), label='Line segment center')
         plot_points([bl], ms=8, c=next(cs), label='bottom left')
         plot_points([tr], ms=8, c=next(cs), label='top right')
         plot_points([rect_cent], ms=8, c=next(cs), label=cand)
+        plot_points(apply_tsf_2d(pcr_rect, tsf), c=next(cs), label='Line segment')
+        plt.legend()
+        plt.gca().set_aspect('equal')
         plt.show()
 
 
@@ -832,11 +837,11 @@ if __name__ == '__main__':
         coef, center = ti.ransac_linear(plot=True, reverse=False)
         ic(coef, center, type(coef), coef.shape)
         ic(coef, math.degrees(math.atan(coef)), center)
-    check_ransac()
+    # check_ransac()
 
     def check_init_proposal():
         pts_cls = d_clusters[11]
         ti = TsfInitializer(pts_cls)
         coef, center = ti.ransac_linear()
         ic(ti.propose_rect_tsf((coef, center), config('dimensions.KUKA'), plot=True))
-    # check_init_proposal()
+    check_init_proposal()

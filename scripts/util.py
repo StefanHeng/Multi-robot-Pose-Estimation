@@ -94,11 +94,6 @@ def pts2max_dist(pts):
     return sqrt(max(dist(pts[a], pts[b]) for a, b in idxs))
 
 
-def get_kuka_pointcloud():
-    d_dim = config('dimensions.KUKA')
-    return get_rect_pointcloud(d_dim['length'], d_dim['width'])
-
-
 def clipper(low, high):
     """
     :return: A clipping function for range [low, high]
@@ -257,19 +252,25 @@ def apply_tsf_2d(arr, tsf):
     return (extend_1s(arr[:, :2]) @ tsf.T)[:, :2]
 
 
-def get_rect_pointcloud(w, h, n=240, visualize=False):
+def get_kuka_pointcloud():
+    # d_dim = config('dimensions.KUKA')
+    # return get_rect_pointcloud(d_dim['length'], d_dim['width'])
+    return get_rect_pointcloud(config('dimensions.KUKA'))
+
+
+def get_rect_pointcloud(dim, n=240, visualize=False):
     """
-    :param w: Width of rectangle
-    :param h: Height of rectangle
+    :param dim: 2-tuple of (length, width) of dict with keys `length` and `width`
     :param n: Number of points/beams
     :param visualize: If True, shows an illustration of the process 
     :return: Array of 2D points of a rectangular contour, as if by a 360 degree of beams
     """
-    r = max(w, h)
+    ln, wd = dim['length'], dim['width'] if isinstance(dim, dict) else dim
+    r = max(ln, wd)
     r = np.full(n, r)
     theta = np.linspace(0, 2 * pi, num=n+1)[:-1]
     x, y = polar2planar(r, theta)
-    boundaries = (-w/2, -h/2, w/2, h/2)
+    boundaries = (-ln/2, -wd/2, ln/2, wd/2)
 
     def intersec_rect(left, bot, right, top):
         """ :return: function that returns the intersection of point relative to a rectangle """
@@ -305,7 +306,7 @@ def get_rect_pointcloud(w, h, n=240, visualize=False):
         fig, ax = plt.subplots(figsize=(16, 9), constrained_layout=True)
         for x_i, y_i in zip(x, y):
             x_int, y_int = intersec_rect(*boundaries)(x_i, y_i)
-            ax.add_patch(Rectangle((-w/2, -h/2), w, h, edgecolor='b', fill=False))
+            ax.add_patch(Rectangle((-ln/2, -wd/2), ln, wd, edgecolor='b', fill=False))
             ax.plot((0, x_int), (0, y_int), marker='o', c='c', ms=2, lw=0.5, ls='dotted')
             ax.plot((x_i, x_int), (y_i, y_int), marker='o', c='orange', ms=2, ls='dotted')
         plt.gca().set_aspect('equal')
