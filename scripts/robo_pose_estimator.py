@@ -435,48 +435,63 @@ class TsfInitializer:
         :param plot: If true, the result is visualized
             Allowed only for single cluster
         :param reverse: If reversed, the independent and dependent axis in `pts` are flipped
-        :return: 2-tuple of (centroid in the range of inlier points, coefficient), or list of them
+        :return: 2-tuple of (coefficient, centroid in the range of inlier points), or list of them
         """
         def _ransac_linear(cluster):
+            cluster = np.asarray(cluster)
             ransac = linear_model.RANSACRegressor()
-            x, y = cluster[:, 0], cluster[:, 1]
+            # ic(cluster)
             if reverse:
-                x, y = y, x
+                cluster = cluster[:, ::-1]
+                # ic(cluster)
+
+            x, y = cluster[:, 0], cluster[:, 1]
             ransac.fit(x.reshape(-1, 1), y.reshape(-1, 1))
-            ic(ransac.estimator_.coef_)
-            # ic(vars(ransac.estimator_))
 
             inlier_mask = ransac.inlier_mask_
-            outlier_mask = np.logical_not(inlier_mask)
             inliers = cluster[inlier_mask]
-            outliers = cluster[outlier_mask]
+            x_in, y_in = inliers[:, 0], inliers[:, 1]
 
-            x_ = np.linspace(inliers[:, 0].min(), inliers[:, 0].max(), num=20)[:, np.newaxis]
+            x_ = np.linspace(x_in.min(), x_in.max(), num=2)[:, np.newaxis]
             y_ = ransac.predict(x_)
             center = [x_.mean(), y_.mean()]
-            ic((y_.max() - y_.min()) / (x_.max() - x_.min()))
-            # ic(inliers.mean(axis=0))
-            ic(center, inliers.mean(axis=0))
-            # x, y = inliers.mean(axis=0)
-            # angle = math.degrees(math.tan(y/x))
-            ic(math.degrees(math.atan(ransac.estimator_.coef_)))
-            # ic(y/x, angle)
-
-            # ic(x_, y_)
+            if reverse:
+                center.reverse()
 
             if labels is None and plot:
-                plt.figure(figsize=(16, 9))
+                outlier_mask = np.logical_not(inlier_mask)
+                outliers = cluster[outlier_mask]
+
+                d = 9
+                # ic(y.max(), y.min(), x.max(), x.min())
+                # ic((y.max()-y.min()) / (x.max()-x.min()))
+                ratio = (y.max()-y.min()) / (x.max()-x.min())
+                ratio = clipper(2**-2, 2**2)(ratio)
+                # ic(ratio)
+                # If reversed, plot dimensions in the original order
+                plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
                 cs = iter(sns.color_palette(palette='husl', n_colors=7))
-                plt.plot(inliers[:, 0], inliers[:, 1], lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
-                plt.plot(outliers[:, 0], outliers[:, 1], lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
-                plt.plot(x_, y_, lw=0.5, label='regression')
-                plot_points([inliers.mean(axis=0)], ms=8, c=next(cs), label='Inlier centroid')
-                plot_points([center], ms=8, c=next(cs), label='Inlier regressed centroid')
+                regr = [x_, y_]
+                ins = [x_in, y_in]
+                outs = [outliers[:, 0], outliers[:, 1]]
+                center_in = inliers.mean(axis=0)
+                if reverse:
+                    regr.reverse()
+                    ins.reverse()
+                    outs.reverse()
+                    center_in[:] = center_in[::-1]
+                plt.plot(*ins, lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
+                plt.plot(*outs, lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
+                plt.plot(*regr, lw=0.5, label='Regression')
+                plot_points([center_in], ms=8, c=next(cs), label='Centroid or inliers')
+                plot_points([center], ms=8, c=next(cs), label='Centroid of regression')
+
                 plt.gca().set_aspect('equal')
                 plt.legend()
                 plt.title('RANSAC illustration on HSR scan cluster')
                 plt.show()
-            return
+            coef = ransac.estimator_.coef_
+            return 1/coef if reverse else coef, center
 
         if labels is None:
             return _ransac_linear(self.pts)
@@ -771,5 +786,6 @@ if __name__ == '__main__':
     def check_ransac():
         pts_cls = d_clusters[11]
         ti = TsfInitializer(pts_cls)
-        ti.ransac_linear(plot=True)
+        coef, center = ti.ransac_linear(plot=True, reverse=True)
+        ic(coef, math.degrees(math.atan(coef)), center)
     check_ransac()

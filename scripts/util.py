@@ -20,7 +20,7 @@ from icecream import ic
 from scripts.data_path import *
 
 rcParams['figure.constrained_layout.use'] = True
-rcParams["figure.dpi"] = 100
+rcParams['figure.dpi'] = 100
 rcParams['font.size'] = 12
 sns.set_style('darkgrid')
 
