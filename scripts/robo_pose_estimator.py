@@ -119,6 +119,22 @@ class Loss:
             arg_idxs = dist.argsort()
             idxs_pair_sort = idxs_pair[arg_idxs]
             idxs_sort = idxs_[arg_idxs]
+            dist_sort = dist[arg_idxs]
+
+
+
+            ic(idxs_pair_sort.shape, idxs_pair_sort)
+            idxs_tgt_sort = idxs_pair_sort[:, 1]
+            # ic(idxs_pair_sort, np.unique(idxs_pair_sort, return_index=True))
+            ic(idxs_tgt_sort, np.unique(idxs_tgt_sort, return_index=True))
+            idxs_tgt_uniq = np.unique(idxs_tgt_sort, return_index=True)[1]
+            idxs_pair_uniq_tgt =idxs_pair_sort[idxs_tgt_uniq]
+            dist_by_tgt = dist_sort[idxs_tgt_uniq]
+            idxs_tgt_sort = dist_by_tgt.argsort()
+            ic(idxs_pair_uniq_tgt[idxs_tgt_sort])
+
+
+
 
             def arr_idx(a, v):
                 """
@@ -138,13 +154,17 @@ class Loss:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+            np.testing.assert_array_equal(idxs_pair_uniq_tgt[idxs_tgt_sort], idxs_pair_uniq)
+
             ret = [
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
                 idxs_pair_uniq
             ]
+            ic(idxs_pair_uniq)
             if with_dist:
                 ret += [dist[idxs_pair_uniq[:, 0]]]
+            # exit(1)
             return ret
 
     def __init__(self, tgt):
@@ -179,16 +199,16 @@ class Loss:
             from numpy import inf
             arrs_ = arr[arr != inf]
             ma, mi = arrs_.max(), arrs_.min()
-            # ic(ma)
-            # ic(np.where(errs == inf))
             arr[arr == inf] = ma + (ma-mi) / 2**4
 
         def _pose_error(cluster):
             num = cluster.shape[0] * cls_frac
 
             def __pose_error(tsf_):
-                ret = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
-                src_mch, tgt_mch, idxs, dist = ret
+                src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
+                if len(dist) > 20:
+                    ic(tsf_)
+                    exit(1)
                 if dist[0] > dist_thresh or idxs.shape[0] < num:  # dist[0] is the smallest value
                     return inf
                 err = self.pts_match_error(src_mch, tgt_mch, n=n)
@@ -266,8 +286,8 @@ class Search:
 
         def default_prec():
             # return dict(tsl=3, angle=1)
-            # return dict(tsl=5e-1, angle=1 / 9)
-            return dict(tsl=1e0, angle=1 / 2)
+            # return dict(tsl=5e-1, angle=1/9)
+            return dict(tsl=1e0, angle=1/2)
 
         prec, ran = 'precision', 'range'
         dft_prec, dft_ran = default_prec(), default_ran()
@@ -310,8 +330,6 @@ class Search:
             with open(fnm, 'wb') as handle:
                 pickle.dump(d, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 print(f'{now()}| Grid search result written to pickle ')
-        # ic(errs)
-
         return opns_x, opns_y, opns_ang, ((label_idxs, errs) if has_label else errs)
 
 
@@ -604,8 +622,8 @@ if __name__ == '__main__':
             (pcr_kuka, pts_hsr),
             reverse=True,
             save=True,
-            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
-            # grid=dict(precision=dict(tsl=0.25, angle=1 / 20), range=dict(angle=(0, 1))),
+            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-6, 6), y=(-6, 6), angle=(0, 1))),
+            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(angle=(0, 1))),
             err_kwargs=dict(labels=lbs, bias=False, n=2, dist_thresh=2, cls_frac=0.25),
         )
         plot_grid_search(
@@ -620,27 +638,16 @@ if __name__ == '__main__':
             # interp_kwargs=dict(method='linear')
         )
     # grid_search_clustered()
-    # cProfile.run('grid_search_clustered()')
 
-    import cProfile, pstats
-    profiler = cProfile.Profile()
-    profiler.enable()
-    grid_search_clustered()
-    profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats('cumtime')
-    stats.print_stats()
-    import cProfile, pstats, io
-    from pstats import SortKey
-
-    # pr = cProfile.Profile()
-    # pr.enable()
-    # grid_search_clustered()
-    # pr.disable()
-    # s = io.StringIO()
-    # sortby = SortKey.CUMULATIVE
-    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    # ps.print_stats()
-    # print(s.getvalue())
+    def profile():
+        import cProfile, pstats
+        profiler = cProfile.Profile()
+        profiler.enable()
+        grid_search_clustered()
+        profiler.disable()
+        stats = pstats.Stats(profiler).sort_stats('cumtime')
+        stats.print_stats()
+    profile()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -687,10 +694,9 @@ if __name__ == '__main__':
     # check_grid_search_cluster()
 
     def check_pose_error_plot():
-        opn = [-2.75, -0.75, 0.35]
-        # ic(d_clusters)
-        pts_cls = d_clusters[11]
-        # ic(pts_cls.shape)
-        # pts =
+        # opn = [-2.75, -0.75, 0.35]
+        # opn = [-13., 0., -0.5]
+        opn = [-0.75, 2., 0.05]
+        pts_cls = d_clusters[12]
         Loss(pcr_kuka).pose_error(pts_cls, opn, plot=True)
     # check_pose_error_plot()
