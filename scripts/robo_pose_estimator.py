@@ -3,6 +3,7 @@ import math
 import pickle
 
 import numpy as np
+from sklearn import linear_model
 from scipy.spatial import KDTree
 from sklearn.cluster import SpectralClustering, AgglomerativeClustering, DBSCAN
 from sklearn.mixture import GaussianMixture
@@ -118,52 +119,53 @@ class Loss:
             idxs_pair = np.vstack([np.arange(idxs_.size), idxs_]).T  # Each element of [src_idx, tgt_idx]
             arg_idxs = dist.argsort()
             idxs_pair_sort = idxs_pair[arg_idxs]
-            idxs_sort = idxs_[arg_idxs]
+            # idxs_sort = idxs_[arg_idxs]
             dist_sort = dist[arg_idxs]
 
 
 
-            ic(idxs_pair_sort.shape, idxs_pair_sort)
+            # ic(idxs_pair_sort.shape, idxs_pair_sort)
+            # Fine the unique targets with the lowest distances
             idxs_tgt_sort = idxs_pair_sort[:, 1]
             # ic(idxs_pair_sort, np.unique(idxs_pair_sort, return_index=True))
-            ic(idxs_tgt_sort, np.unique(idxs_tgt_sort, return_index=True))
+            # ic(idxs_tgt_sort, np.unique(idxs_tgt_sort, return_index=True))
             idxs_tgt_uniq = np.unique(idxs_tgt_sort, return_index=True)[1]
-            idxs_pair_uniq_tgt =idxs_pair_sort[idxs_tgt_uniq]
+            idxs_pair_uniq = idxs_pair_sort[idxs_tgt_uniq]
+
+            # Sort the pairs by distance
             dist_by_tgt = dist_sort[idxs_tgt_uniq]
             idxs_tgt_sort = dist_by_tgt.argsort()
-            ic(idxs_pair_uniq_tgt[idxs_tgt_sort])
+            idxs_pair_uniq = idxs_pair_uniq[idxs_tgt_sort]
 
-
-
-
-            def arr_idx(a, v):
-                """
-                :return: 1st occurrence index of `v` in `a`, a numpy 1D array
-                """
-                return np.where(a == v)[0][0]
-
-            def _get_idx(arr):
-                def _get(i):
-                    """
-                    If arr[i] is not the first occurrence, it's set to -1
-                    """
-                    i_ = arr_idx(arr, arr[i])
-                    return arr[i] if i_ == i else -1
-
-                return _get
-
-            idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
-            idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
-            np.testing.assert_array_equal(idxs_pair_uniq_tgt[idxs_tgt_sort], idxs_pair_uniq)
+            # def arr_idx(a, v):
+            #     """
+            #     :return: 1st occurrence index of `v` in `a`, a numpy 1D array
+            #     """
+            #     return np.where(a == v)[0][0]
+            #
+            # def _get_idx(arr):
+            #     def _get(i):
+            #         """
+            #         If arr[i] is not the first occurrence, it's set to -1
+            #         """
+            #         i_ = arr_idx(arr, arr[i])
+            #         return arr[i] if i_ == i else -1
+            #
+            #     return _get
+            #
+            # idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
+            # idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+            # np.testing.assert_array_equal(idxs_pair_uniq_tgt[idxs_tgt_sort], idxs_pair_uniq)
 
             ret = [
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
                 idxs_pair_uniq
             ]
-            ic(idxs_pair_uniq)
+            # ic(idxs_pair_uniq)
             if with_dist:
                 ret += [dist[idxs_pair_uniq[:, 0]]]
+                # ic(dist[idxs_pair_uniq[:, 0]])
             # exit(1)
             return ret
 
@@ -206,9 +208,9 @@ class Loss:
 
             def __pose_error(tsf_):
                 src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
-                if len(dist) > 20:
-                    ic(tsf_)
-                    exit(1)
+                # if len(dist) > 20:
+                #     ic(tsf_)
+                #     exit(1)
                 if dist[0] > dist_thresh or idxs.shape[0] < num:  # dist[0] is the smallest value
                     return inf
                 err = self.pts_match_error(src_mch, tgt_mch, n=n)
@@ -418,6 +420,21 @@ def visualize(a, b, init_tsf=np.identity(3), mode='static', **kwargs):
     return tsf, states
 
 
+class TsfInitializer:
+    """
+    Given a set of laser scan points, generate possible candidates of initial transformation
+    """
+    def __init__(self, pts):
+        self.pts = pts
+
+    def ransac_rct(self, labels):
+        """
+
+        :param labels:
+        :return:
+        """
+
+
 class PoseEstimator:
     """
     Various laser-based pose estimation algorithms between KUKA iiwa and HSR robot
@@ -614,7 +631,7 @@ if __name__ == '__main__':
     d_cls_res = config('heuristics.cluster_results.good')
     lbs = d_cls_res['labels']
     d_clusters = d_cls_res['clusters']
-    d_clusters = {int(k): v for k, v in d_clusters.items()}
+    d_clusters = {int(k): np.array(v) for k, v in d_clusters.items()}
 
     def grid_search_clustered():
         # ic(pcr_kuka.shape, pts_hsr.shape)
@@ -623,7 +640,7 @@ if __name__ == '__main__':
             reverse=True,
             save=True,
             # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-6, 6), y=(-6, 6), angle=(0, 1))),
-            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(angle=(0, 1))),
+            grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(angle=(0, 1))),
             err_kwargs=dict(labels=lbs, bias=False, n=2, dist_thresh=2, cls_frac=0.25),
         )
         plot_grid_search(
@@ -647,7 +664,7 @@ if __name__ == '__main__':
         profiler.disable()
         stats = pstats.Stats(profiler).sort_stats('cumtime')
         stats.print_stats()
-    profile()
+    # profile()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -700,3 +717,36 @@ if __name__ == '__main__':
         pts_cls = d_clusters[12]
         Loss(pcr_kuka).pose_error(pts_cls, opn, plot=True)
     # check_pose_error_plot()
+
+    def check_ransac():
+        pts_cls = d_clusters[11]
+        ic(pts_cls.shape)
+
+        ransac = linear_model.RANSACRegressor()
+        x, y = pts_cls[:, 0], pts_cls[:, 1]
+        ransac.fit(x.reshape(-1, 1), y.reshape(-1, 1))
+        ic(ransac.estimator_.coef_)
+
+        inlier_mask = ransac.inlier_mask_
+        outlier_mask = np.logical_not(inlier_mask)
+        inliers = pts_cls[inlier_mask]
+        outliers = pts_cls[outlier_mask]
+
+        x_ = np.linspace(inliers[:, 0].min(), inliers[:, 0].max(), num=20)[:, np.newaxis]
+        y_ = ransac.predict(x_)
+        center = [x_.mean(), y_.mean()]
+        # ic(x_, y_)
+        ic(center, inliers.mean(axis=0))
+        x, y = inliers.mean(axis=0)
+        angle = math.degrees(math.tan(y/x))
+        ic(y/x, angle)
+
+        plt.figure(figsize=(16, 9))
+        plt.plot(inliers[:, 0], inliers[:, 1], lw=0.3, marker='o', ms=1, label='Inliers')
+        plt.plot(outliers[:, 0], outliers[:, 1], lw=0.3, marker='o', ms=1, label='Outliers')
+        plt.plot(x_, y_, lw=0.5, label='regression')
+        plt.gca().set_aspect('equal')
+        plt.legend()
+        plt.title('RANSAC illustration on HSR scan cluster')
+        plt.show()
+    check_ransac()
