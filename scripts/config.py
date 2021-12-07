@@ -24,16 +24,25 @@ config = {
             good_no_rotation=[2.5, -0.5],
             actual_pose=[2.5, -0.75, -0.15]
         ),
-        cluster_eg=dict()
+        cluster_results=dict()
     )
 }
 
-# res =
-# ic(type(res), type(res[0]), res[:5])
-config['heuristics']['cluster_eg']['good'] = [
-    int(lb) for lb in Cluster.cluster(eg_hsr_scan(), approach='hierarchical', distance_threshold=1)
-]
-# ic(type(config['heuristics']['cluster_result']))
+
+pts_hsr = eg_hsr_scan()
+lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
+# ic(lbs[0])
+# lst = lbs.tolist()
+# ic(type(lst), type(lst[0]), lst[:5])
+d_clusters = {int(lb): pts_hsr[np.where(lbs == lb)].tolist() for lb in np.unique(lbs)}
+config['heuristics']['cluster_results']['good'] = dict(
+    labels=lbs.tolist(),
+    clusters=d_clusters
+)
+# k = list(d_clusters.keys())
+# ic(type(k[0]))
+# ic(k, d_clusters)
+# ic(config)
 # exit(1)
 
 

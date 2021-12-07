@@ -59,6 +59,11 @@ def config(attr):
         with open(f'{PATH_BASE}/{DIR_PROJ}/config.json') as f:
             config.config = json.load(f)
     return get(config.config, attr)
+    # ic('here', attr)
+    # if isinstance(ret, dict) and list(ret.keys())[0].isdigit():  # For JSON write
+    #     ic('here')
+    #     ret = {int(k): v for k, v in ret.items()}
+    # return ret
 
 
 def eg_hsr_scan(k1=0, k2=77):
@@ -324,6 +329,25 @@ def plot_points(arr, **kwargs):
         c='orange',
     )
     plt.plot(arr[:, 0], arr[:, 1], **(kwargs_ | kwargs))
+
+
+def plot_2d(arr, label=None, title=None, save=False, show=True, **kwargs):
+    """ Plot potentially list pf 2D points """
+    def _plot(a, lb):
+        plt.plot(a[:, 0], a[:, 1], marker='o', ms=0.3, lw=0.25, label=lb, **kwargs)
+    plt.figure(figsize=(16, 9), constrained_layout=True)
+    if not isinstance(arr, list):
+        arr = [arr]
+    lbl = [None for _ in arr] if label is None else label
+    _ = [_plot(a, lb) for a, lb in zip(arr, lbl)]  # Execute
+    if label:
+        plt.legend()
+    if title:
+        plt.title(title)
+    plt.gca().set_aspect('equal')
+    save_fig(save, title)
+    if show:
+        plt.show()
 
 
 def plot_points3d(arr, **kwargs):

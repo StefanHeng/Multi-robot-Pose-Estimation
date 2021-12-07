@@ -799,6 +799,10 @@ if __name__ == '__main__':
     # )
     # ic(d1 | d2)  # So not recursive
 
-    fn = lambda a, b: ic(a, b)
-    fn(1, 2)
+    # fn = lambda a, b: ic(a, b)
+    # fn(1, 2)
+
+    import numpy as np
+    a = np.ones((2, 4))
+    ic(a.tolist())
 

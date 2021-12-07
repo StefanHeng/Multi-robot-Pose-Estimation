@@ -137,6 +137,7 @@ class Loss:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
+            ic(src[idxs_pair_uniq[:, 0]][:, :2])
             return (
                 src[idxs_pair_uniq[:, 0]][:, :2],
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
@@ -150,7 +151,7 @@ class Loss:
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
-    def pose_error(self, src, tsf, labels=None, bias=False, n=2):
+    def pose_error(self, src, tsf, labels=None, bias=False, n=2, plot=False):
         """
         :param src: List of 2d points to match target points
         :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
@@ -159,9 +160,14 @@ class Loss:
             If specified, the target points are split by clusters where loss is computed for each cluster
         :param bias: If true, bias transformations with more points matched linearly
         :param n: Order of norm
+        :param plot: If true, and only one option is given,
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, 2-tuple of (label-to-index mapping, error for each cluster in the mapping order)
         """
+        src = np.asarray(src)
+        tsf = np.asarray(tsf)
+        # ic(tsf)
+
         def _pose_error(cluster):
             def __pose_error(tsf_):
                 src_match, tgt_match, idxs = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)))
@@ -171,8 +177,27 @@ class Loss:
             if len(tsf.shape) == 2:
                 return np.apply_along_axis(__pose_error, 1, tsf)
             else:
-                return __pose_error(tsf)
+                # ic('here')
+                err = __pose_error(tsf)
+                if plot:
+                    src_ = apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf))
+                    src_match, tgt_match, idxs = self.nn(src_)
+                    ic(idxs.shape)
+
+                    # ic(idxs)
+                    plot_2d([src_, self.tgt], label=['Source points, transformed', 'Target points'], show=False)
+                    for s, t in zip(src_match, tgt_match):
+                        ic(s, t)
+                        plot_line_seg(s, t)
+                    plt.show()
+                    # ic(src_[idxs[:, 0]][:, :2], src_match)
+                    # idxs_src, idxs_tgt = idxs[:, 0], idxs[:, 1]
+                    # ic(src[idxs_src].shape, src_match.shape)
+                    # np.testing.assert_array_equal(src[idxs_src], src_match)
+                    # exit(1)
+                return err
         if labels is None:
+            # ic('lb none')
             return _pose_error(src)
         else:
             def _get(idx, c):
@@ -558,10 +583,13 @@ if __name__ == '__main__':
                 )
     # pick_cmap()
 
-    def grid_search_clustered():
-        # A good clustering result
-        lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
+    # lbs = Cluster.cluster(pts_hsr, approach='hierarchical', distance_threshold=1)
+    d_cls_res = config('heuristics.cluster_results.good')
+    lbs = d_cls_res['labels']
+    d_clusters = d_cls_res['clusters']
+    d_clusters = {int(k): v for k, v in d_clusters.items()}
 
+    def grid_search_clustered():
         ret = Search.grid_search(
             (pcr_kuka, pts_hsr),
             reverse=True,
@@ -579,7 +607,7 @@ if __name__ == '__main__':
             tsf_ideal=tsf_ideal,
             zlabel='Normalized L2 norm from matched points in best cluster'
         )
-    grid_search_clustered()
+    # grid_search_clustered()
 
     def explore_visualize_reversed_icp():
         # A good cluster
@@ -600,22 +628,36 @@ if __name__ == '__main__':
     # explore_visualize_reversed_icp()
 
     def check_grid_search_cluster():
-        fnm = 'gird-search, [(-5, 5), (-5, 5), 0.25], [(0, 1), 0.05], 2021-12-06 00:00:37.pickle'
+        fnm = 'gird-search, [(-5, 5), (-5, 5), 0.25], [(0, 1), 0.05], 2021-12-06 17:41:30.pickle'
         with open(fnm, 'rb') as handle:
             d = pickle.load(handle)
             opns_x = d['options_x']
             opns_y = d['options_y']
             opns_ang = d['options_angle']
             errs = d['errors']
+            label_idxs = d['label_indices']
+            ic(label_idxs)
             opns = cartesian([opns_x, opns_y, opns_ang])
             ic(opns.shape, errs.shape)
-            idxs_sort = np.argsort(errs)
+            idxs_sort = np.argsort(errs.min(axis=-1))
+            ic(idxs_sort.shape, idxs_sort[:20])
             opns = opns[idxs_sort]
             errs = errs[idxs_sort]
-            n = 20
+            n = 5
             for opn, err in zip(opns[:n], errs[:n]):
-                ic(opn, err)
+                idx = np.argmin(err)
+                ic(opn, label_idxs[idx], err[idx])
             ic()
             for opn, err in zip(opns[-n:], errs[-n:]):
-                ic(opn, err)
+                idx = np.argmin(err)
+                ic(opn, label_idxs[idx], err[idx])
     # check_grid_search_cluster()
+
+    def check_pose_error_plot():
+        opn = [-2.75, -0.75, 0.35]
+        # ic(d_clusters)
+        pts_cls = d_clusters[11]
+        # ic(pts_cls.shape)
+        # pts =
+        Loss(pcr_kuka).pose_error(pts_cls, opn, plot=True)
+    check_pose_error_plot()
