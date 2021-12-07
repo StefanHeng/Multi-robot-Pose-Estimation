@@ -422,17 +422,67 @@ def visualize(a, b, init_tsf=np.identity(3), mode='static', **kwargs):
 
 class TsfInitializer:
     """
-    Given a set of laser scan points, generate possible candidates of initial transformation
+    Given a set of 2D laser scan points, generate possible candidates of initial transformation
     """
     def __init__(self, pts):
         self.pts = pts
 
-    def ransac_rct(self, labels):
+    def ransac_linear(self, labels=None, plot=False, reverse=False):
         """
+        Fit the set of points linearly
 
-        :param labels:
-        :return:
+        :param labels: If given, `pts` are first separated, and RANSAC is performed on each cluster
+        :param plot: If true, the result is visualized
+            Allowed only for single cluster
+        :param reverse: If reversed, the independent and dependent axis in `pts` are flipped
+        :return: 2-tuple of (centroid in the range of inlier points, coefficient), or list of them
         """
+        def _ransac_linear(cluster):
+            ransac = linear_model.RANSACRegressor()
+            x, y = cluster[:, 0], cluster[:, 1]
+            if reverse:
+                x, y = y, x
+            ransac.fit(x.reshape(-1, 1), y.reshape(-1, 1))
+            ic(ransac.estimator_.coef_)
+            # ic(vars(ransac.estimator_))
+
+            inlier_mask = ransac.inlier_mask_
+            outlier_mask = np.logical_not(inlier_mask)
+            inliers = cluster[inlier_mask]
+            outliers = cluster[outlier_mask]
+
+            x_ = np.linspace(inliers[:, 0].min(), inliers[:, 0].max(), num=20)[:, np.newaxis]
+            y_ = ransac.predict(x_)
+            center = [x_.mean(), y_.mean()]
+            ic((y_.max() - y_.min()) / (x_.max() - x_.min()))
+            # ic(inliers.mean(axis=0))
+            ic(center, inliers.mean(axis=0))
+            # x, y = inliers.mean(axis=0)
+            # angle = math.degrees(math.tan(y/x))
+            ic(math.degrees(math.atan(ransac.estimator_.coef_)))
+            # ic(y/x, angle)
+
+            # ic(x_, y_)
+
+            if labels is None and plot:
+                plt.figure(figsize=(16, 9))
+                cs = iter(sns.color_palette(palette='husl', n_colors=7))
+                plt.plot(inliers[:, 0], inliers[:, 1], lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
+                plt.plot(outliers[:, 0], outliers[:, 1], lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
+                plt.plot(x_, y_, lw=0.5, label='regression')
+                plot_points([inliers.mean(axis=0)], ms=8, c=next(cs), label='Inlier centroid')
+                plot_points([center], ms=8, c=next(cs), label='Inlier regressed centroid')
+                plt.gca().set_aspect('equal')
+                plt.legend()
+                plt.title('RANSAC illustration on HSR scan cluster')
+                plt.show()
+            return
+
+        if labels is None:
+            return _ransac_linear(self.pts)
+        else:
+            d_cls = {lb: self.pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
+            return {lb: _ransac_linear(c) for lb, c in d_cls.items()}
 
 
 class PoseEstimator:
@@ -720,33 +770,6 @@ if __name__ == '__main__':
 
     def check_ransac():
         pts_cls = d_clusters[11]
-        ic(pts_cls.shape)
-
-        ransac = linear_model.RANSACRegressor()
-        x, y = pts_cls[:, 0], pts_cls[:, 1]
-        ransac.fit(x.reshape(-1, 1), y.reshape(-1, 1))
-        ic(ransac.estimator_.coef_)
-
-        inlier_mask = ransac.inlier_mask_
-        outlier_mask = np.logical_not(inlier_mask)
-        inliers = pts_cls[inlier_mask]
-        outliers = pts_cls[outlier_mask]
-
-        x_ = np.linspace(inliers[:, 0].min(), inliers[:, 0].max(), num=20)[:, np.newaxis]
-        y_ = ransac.predict(x_)
-        center = [x_.mean(), y_.mean()]
-        # ic(x_, y_)
-        ic(center, inliers.mean(axis=0))
-        x, y = inliers.mean(axis=0)
-        angle = math.degrees(math.tan(y/x))
-        ic(y/x, angle)
-
-        plt.figure(figsize=(16, 9))
-        plt.plot(inliers[:, 0], inliers[:, 1], lw=0.3, marker='o', ms=1, label='Inliers')
-        plt.plot(outliers[:, 0], outliers[:, 1], lw=0.3, marker='o', ms=1, label='Outliers')
-        plt.plot(x_, y_, lw=0.5, label='regression')
-        plt.gca().set_aspect('equal')
-        plt.legend()
-        plt.title('RANSAC illustration on HSR scan cluster')
-        plt.show()
+        ti = TsfInitializer(pts_cls)
+        ti.ransac_linear(plot=True)
     check_ransac()
