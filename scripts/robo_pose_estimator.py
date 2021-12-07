@@ -107,14 +107,19 @@ class Loss:
         def __init__(self, tgt):
             self.tgt = tgt
             self.tree_tgt = KDTree(tgt)
+            self.n = self.tgt.shape[0]
 
         def __call__(self, src, with_dist=False):
             """
             Finds nearest neighbors in the target
             """
-            dist, idxs_ = self.tree_tgt.query(src[:, :2], workers=-1)
+            dist, idxs_ = self.tree_tgt.query(src[:, :2])
             # ic(idxs_, dist)
-            ic(src.shape)
+            # if np.isinf(dist).all():
+            #     return None
+            # else:
+            #     ic(idxs_, dist)
+            # ic(src.shape)
             # ic(src.shape, src[0], self.tgt.shape)
             # exit(1)
             # Keep pairs with distinct target points by removing pairs with larger distance
@@ -130,6 +135,8 @@ class Loss:
                 """
                 return np.where(a == v)[0][0]
 
+            # arr_idx(idxs_sort)
+
             def _get_idx(arr):
                 def _get(i):
                     """
@@ -142,10 +149,15 @@ class Loss:
 
             idxs_1st_occ = np.vectorize(_get_idx(idxs_sort))(np.arange(idxs_sort.size))
             idxs_pair_uniq = idxs_pair_sort[np.where(idxs_1st_occ != -1)]
-
-            idx = idxs_pair_uniq[0]
             # ic(idxs_pair_uniq)
-            pt1, pt2 = src[idx[0]], self.tgt[idx[1]]
+            # hose with distance beyond upperbound, will have target index of `self.n` => Prune
+            # idxs_pair_uniq = idxs_pair_uniq[idxs_pair_uniq[:, 1] < self.n]
+            # ic(idxs_pair_uniq)
+            # exit(1)
+
+            # idx = idxs_pair_uniq[0]
+            # ic(idxs_pair_uniq)
+            # pt1, pt2 = src[idx[0]], self.tgt[idx[1]]
             # ic(pt1, pt2)
             # ic(np.linalg.norm(pt1-pt2, ord=2))
             # ic(dist[idx[0]])
@@ -165,7 +177,7 @@ class Loss:
         """
         :param tgt: List of 2d points, a base set of points to compute loss
         """
-        ic(tgt.shape)
+        # ic(tgt.shape)
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
@@ -187,16 +199,25 @@ class Loss:
         # ic(tsf)
 
         def _pose_error(cluster):
+            num = cluster.shape[0] * 0.25
             def __pose_error(tsf_):
-                src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
-                ic(dist.shape, dist[:5])
+                # ic(tsf_)
+                # tsf_ = np.array([-3.75, -1.5, 1.])
+                ret = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
+                # if ret is None:
+                #     return float('inf')
+                src_mch, tgt_mch, idxs, dist = ret
+                # dist[0] is the smallest value
+                if dist[0] > 2 or idxs.shape[0] < num:
+                    return float('inf')
+                # ic(tsf_, dist.shape, dist[:5])
                 err = self.pts_match_error(src_mch, tgt_mch, n=n)
                 # ic(idxs.shape[0], err / (idxs.shape[0]**2))
                 # exit(1)
-                return err / (idxs.shape[0]**2) if bias else err
+                return err / (idxs.shape[0]) if bias else err
             if len(tsf.shape) == 2:
-                ret = np.apply_along_axis(__pose_error, 1, tsf)
-                exit(1)
+                return np.apply_along_axis(__pose_error, 1, tsf)
+                # exit(1)
             else:
                 err = __pose_error(tsf)
                 return err
@@ -230,8 +251,7 @@ class Loss:
             normalized by number points
         """
         n = np.linalg.norm(pts1[:, :2] - pts2[:, :2], ord=n, axis=1)
-        ic(n)
-        # return n.sum() / (n.size**2)
+        # ic(n)
         return n.mean()
 
 
@@ -271,9 +291,9 @@ class Search:
             )
 
         def default_prec():
-            return dict(tsl=3, angle=1)
-            # precision = dict(tsl=5e-1, angle=1 / 9)
-            # precision = dict(tsl=1e0, angle=1 / 2)
+            # return dict(tsl=3, angle=1)
+            # return dict(tsl=5e-1, angle=1 / 9)
+            return dict(tsl=1e0, angle=1 / 2)
 
         prec, ran = 'precision', 'range'
         dft_prec, dft_ran = default_prec(), default_ran()
@@ -298,6 +318,9 @@ class Search:
         if err_kwargs is None:
             err_kwargs = dict()
         errs = Loss(tgt).pose_error(src, opns, **err_kwargs)
+        has_label = 'labels' in err_kwargs
+        if has_label:
+            label_idxs, errs = errs
         print(f'{now()}| ... completed')
 
         if save:
@@ -307,14 +330,21 @@ class Search:
                 options_angle=opns_ang,
                 errors=errs
             )
-            if 'labels' in err_kwargs:
-                d['label_indices'] = errs[0]
-                d['errors'] = errs[1]
+            if has_label:
+                d['label_indices'] = label_idxs
             fnm = f'gird-search, {[x_ran, y_ran, prec_tsl]}, {[angle_ran, prec_ang]}, {now()}.pickle'
             with open(fnm, 'wb') as handle:
                 pickle.dump(d, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 print(f'{now()}| Grid search result written to pickle ')
-        return opns_x, opns_y, opns_ang, errs
+        ic(errs)
+
+        from numpy import inf
+        ma = errs[errs != inf].max()
+        ic(ma)
+        ic(np.where(errs == inf))
+        errs[errs == inf] = ma
+
+        return opns_x, opns_y, opns_ang, ((label_idxs, errs) if has_label else errs)
 
 
 class Icp:
@@ -606,8 +636,8 @@ if __name__ == '__main__':
             (pcr_kuka, pts_hsr),
             reverse=True,
             save=True,
-            grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
-            err_kwargs=dict(labels=lbs, bias=True, n=2)
+            # grid=dict(precision=dict(tsl=0.25, angle=1/20), range=dict(x=(-5, 5), y=(-5, 5), angle=(0, 1))),
+            err_kwargs=dict(labels=lbs, bias=False, n=2)
         )
         plot_grid_search(
             pts_hsr, pcr_kuka, *ret,
@@ -617,9 +647,12 @@ if __name__ == '__main__':
             interp=False,
             save=True,
             tsf_ideal=tsf_ideal,
-            zlabel='Normalized L2 norm from matched points in best cluster'
+            zlabel='Normalized L2 norm from matched points in best cluster',
+            # interp_kwargs=dict(method='linear')
         )
-    grid_search_clustered()
+    # grid_search_clustered()
+    import cProfile
+    cProfile.run('grid_search_clustered()')
 
     def explore_visualize_reversed_icp():
         # A good cluster
