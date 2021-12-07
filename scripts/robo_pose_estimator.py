@@ -461,27 +461,29 @@ class TsfInitializer:
             if labels is None and plot:
                 outlier_mask = np.logical_not(inlier_mask)
                 outliers = cluster[outlier_mask]
-
-                d = 9
-                # ic(y.max(), y.min(), x.max(), x.min())
-                # ic((y.max()-y.min()) / (x.max()-x.min()))
-                ratio = (y.max()-y.min()) / (x.max()-x.min())
-                ratio = clipper(2**-2, 2**2)(ratio)
-                # ic(ratio)
-                # If reversed, plot dimensions in the original order
-                plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
-                cs = iter(sns.color_palette(palette='husl', n_colors=7))
                 regr = [x_, y_]
-                ins = [x_in, y_in]
-                outs = [outliers[:, 0], outliers[:, 1]]
+                ins = np.array([x_in, y_in]).T
+                outs = np.array([outliers[:, 0], outliers[:, 1]]).T
                 center_in = inliers.mean(axis=0)
                 if reverse:
                     regr.reverse()
-                    ins.reverse()
-                    outs.reverse()
+                    # ins.reverse()
+                    # ic(ins, ins.shape)
+                    ins[:] = ins[:, ::-1]
+                    # ic(ins, ins.shape)
+                    # outs.reverse()
+                    outs[:] = outs[:, ::-1]
                     center_in[:] = center_in[::-1]
-                plt.plot(*ins, lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
-                plt.plot(*outs, lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
+
+                d = 9
+                ratio = (y.max()-y.min()) / (x.max()-x.min())
+                ratio = clipper(2**-2, 2**2)(ratio)
+                plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
+                cs = iter(sns.color_palette(palette='husl', n_colors=7))
+                # plt.plot(*ins, lw=0.3, marker='o', ms=1, c=next(cs), label='Inliers')
+                plot_points(ins, c=next(cs), label='Inliers')
+                # plt.plot(*outs, lw=0.3, marker='o', ms=1, c=next(cs), label='Outliers')
+                plot_points(outs, c=next(cs), label='Outliers')
                 plt.plot(*regr, lw=0.5, label='Regression')
                 plot_points([center_in], ms=8, c=next(cs), label='Centroid or inliers')
                 plot_points([center], ms=8, c=next(cs), label='Centroid of regression')
@@ -491,13 +493,54 @@ class TsfInitializer:
                 plt.title('RANSAC illustration on HSR scan cluster')
                 plt.show()
             coef = ransac.estimator_.coef_
+            assert coef.size == 1
+            coef = coef[0][0]
             return 1/coef if reverse else coef, center
-
         if labels is None:
             return _ransac_linear(self.pts)
         else:
             d_cls = {lb: self.pts[np.where(lbs == lb)] for lb in np.unique(lbs)}
             return {lb: _ransac_linear(c) for lb, c in d_cls.items()}
+
+    def propose_rect_tsf(self, line_seg, rect_dim, return_mat=True, plot=False):
+        """
+        Given a line segment, propose possible transformations such that the rectangle matches the line segment
+
+        :param line_seg: 2-tuple of (coefficient, centroid)
+        :param rect_dim: 2-tuple of (length, width) of dict with keys `length` and `width`
+        :return: List of transformations
+        :param return_mat: If false, returns 3-tuple of (translation_x, translation_y, rotation angle);
+            Otherwise, returns transformation matrices
+        :param plot: If true, the result is visualized
+        """
+        coef, center = line_seg
+        theta = math.atan(coef)
+        theta_comp = math.pi/2-theta
+        x, y = center
+        ln, wd = rect_dim['length'], rect_dim['width'] if isinstance(rect_dim, dict) else rect_dim
+        hypot = np.linalg.norm(np.array([ln, wd]), ord=2)  # hypotenuse
+        ic(hypot)
+        l, w = ln/2, wd/2
+        ic(coef, center, ln, wd)
+        # coef = 1/coef
+        offsets = []
+
+        bl = (x - w*math.cos(theta), y - w*math.sin(theta))  # Bottom left corner
+        x_tl, y_tl = (x + wd*math.cos(theta), y + wd*math.sin(theta))  # x and y for top left corner
+        tr = (x_tl + ln*math.cos(theta_comp), y_tl - ln*math.sin(theta_comp))
+        ic(bl, tr)
+        rect_cent = np.mean(np.array([bl, tr]), axis=0)
+        ic(rect_cent)
+
+        cs = iter(sns.color_palette(palette='husl', n_colors=7))
+        # plt.plot(rect_cent)
+        cand = 'Rect centroid candidate'
+        diff_x_seg, diff_y_seg = hypot*math.cos(theta), hypot*math.sin(theta)
+        plt.plot([x-diff_x_seg, x+diff_x_seg], [y-diff_y_seg, y+diff_y_seg])
+        plot_points([bl], ms=8, c=next(cs), label='bottom left')
+        plot_points([tr], ms=8, c=next(cs), label='top right')
+        plot_points([rect_cent], ms=8, c=next(cs), label=cand)
+        plt.show()
 
 
 class PoseEstimator:
@@ -786,6 +829,14 @@ if __name__ == '__main__':
     def check_ransac():
         pts_cls = d_clusters[11]
         ti = TsfInitializer(pts_cls)
-        coef, center = ti.ransac_linear(plot=True, reverse=True)
+        coef, center = ti.ransac_linear(plot=True, reverse=False)
+        ic(coef, center, type(coef), coef.shape)
         ic(coef, math.degrees(math.atan(coef)), center)
     check_ransac()
+
+    def check_init_proposal():
+        pts_cls = d_clusters[11]
+        ti = TsfInitializer(pts_cls)
+        coef, center = ti.ransac_linear()
+        ic(ti.propose_rect_tsf((coef, center), config('dimensions.KUKA'), plot=True))
+    # check_init_proposal()
