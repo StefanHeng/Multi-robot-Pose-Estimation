@@ -94,6 +94,7 @@ def extend_1s(arr):  # The jupyter notebook `explore_fuse_pose` seems to require
     Return array with column of 1's appended
     :param arr: 2D array
     """
+    arr = np.asarray(arr)
     return np.hstack([arr, np.ones([arr.shape[0], 1])])
 
 
@@ -123,13 +124,9 @@ class Loss:
             dist_sort = dist[arg_idxs]
 
 
-
-            # ic(idxs_pair_sort.shape, idxs_pair_sort)
-            # Fine the unique targets with the lowest distances
+            # Find the unique targets with the lowest distances
             idxs_tgt_sort = idxs_pair_sort[:, 1]
-            # ic(idxs_pair_sort, np.unique(idxs_pair_sort, return_index=True))
-            # ic(idxs_tgt_sort, np.unique(idxs_tgt_sort, return_index=True))
-            idxs_tgt_uniq = np.unique(idxs_tgt_sort, return_index=True)[1]
+            idxs_tgt_uniq = np.unique(idxs_tgt_sort, return_index=True)[1]  # Index of 1st occurrence
             idxs_pair_uniq = idxs_pair_sort[idxs_tgt_uniq]
 
             # Sort the pairs by distance
@@ -162,11 +159,8 @@ class Loss:
                 self.tgt[idxs_pair_uniq[:, 1]][:, :2],
                 idxs_pair_uniq
             ]
-            # ic(idxs_pair_uniq)
             if with_dist:
                 ret += [dist[idxs_pair_uniq[:, 0]]]
-                # ic(dist[idxs_pair_uniq[:, 0]])
-            # exit(1)
             return ret
 
     def __init__(self, tgt):
@@ -176,38 +170,52 @@ class Loss:
         self.nn = Loss.NearestNeighbor(tgt)
         self.tgt = self.nn.tgt  # Save memory
 
-    def pose_error(self, src, tsf, labels=None, bias=False, n=2, plot=False, dist_thresh=inf, cls_frac=-inf,
-                   adjust_inf=True):
+    def pose_error(
+            self, src, tsf,
+            labels=None, bias=False, n=2, plot=False, dist_thresh=inf, cls_frac=-inf, adjust_inf=True, is_mat=False
+    ):
         """
-        :param adjust_inf: If true, loss of infinity are set to a value below global minimum
-        :param cls_frac: Threshold for fraction of points matched relative to cluster size,
-            if smaller, error is set to infinity
-        :param dist_thresh: Threshold for minimum distance between matched points, if larger, error is set to infinity
         :param src: List of 2d points to match target points
         :param tsf: Proposed translation, given by 3-array of (translation_x, translation_y, rotation angle),
-            or list of proposed translations
+            or translation matrix,
+            or list of them
+        :param is_mat: If `tsf` is a 3-tuple of translation or translation matrix
         :param labels: 1D list, cluster assignments for source points,
             If specified, the target points are split by clusters where loss is computed for each cluster
         :param bias: If true, bias transformations with more points matched linearly
         :param n: Order of norm
+
         :param plot: If true, and only one `tsf` option is given, plot the matched points
+        :param dist_thresh: Threshold for minimum distance between matched points, if larger, error is set to infinity
+        :param cls_frac: Threshold for fraction of points matched relative to cluster size,
+            if smaller, error is set to infinity
+        :param adjust_inf: If true, loss of infinity are set to a value below global minimum
+
         :return: If `labels` unspecified, the error based on closest pair of matched points;
             If `labels` specified, 2-tuple of (label-to-index mapping, error for each cluster in the mapping order)
         """
         src = np.asarray(src)
         tsf = np.asarray(tsf)
+        if not is_mat:
+            ic(tsf.shape, tsf)
+            tsf = np.apply_along_axis(tsl_n_angle2tsf, 1, tsf)
+            ic(tsf.shape)
+            exit(1)
 
         def adjust(arr):
-            from numpy import inf
-            arrs_ = arr[arr != inf]
-            ma, mi = arrs_.max(), arrs_.min()
-            arr[arr == inf] = ma + (ma-mi) / 2**4
+            if arr.size > 1 and adjust_inf:
+                from numpy import inf
+                arrs_ = arr[arr != inf]
+                ma, mi = arrs_.max(), arrs_.min()
+                arr[arr == inf] = ma + (ma-mi) / 2**4
 
         def _pose_error(cluster):
             num = cluster.shape[0] * cls_frac
+            # ic('then im here', tsf)
 
             def __pose_error(tsf_):
-                src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsl_n_angle2tsf(tsf_)), with_dist=True)
+                # ic(tsf_)
+                src_mch, tgt_mch, idxs, dist = self.nn(apply_tsf_2d(cluster, tsf_), with_dist=True)
                 # if len(dist) > 20:
                 #     ic(tsf_)
                 #     exit(1)
@@ -215,20 +223,22 @@ class Loss:
                     return inf
                 err = self.pts_match_error(src_mch, tgt_mch, n=n)
                 return err / math.sqrt(idxs.shape[0]) if bias else err
-            if len(tsf.shape) == 2:
+            if len(tsf.shape) == 3:
                 return np.apply_along_axis(__pose_error, 1, tsf)
             else:
                 err = __pose_error(tsf)
+                # ic('here', tsf, err)
                 return err
         if labels is None:
             if plot:
-                src_ = apply_tsf_2d(src, tsl_n_angle2tsf(tsf))
+                src_ = apply_tsf_2d(src, tsf)
                 src_mch_, tgt_mch_, _ = self.nn(src_)
                 plot_2d([src_, self.tgt], label=['Source points, transformed', 'Target points'], show=False)
                 for s, t in zip(src_mch_, tgt_mch_):
                     plot_line_seg(s, t)
                 plt.show()
             errs = _pose_error(src)
+            # ic('am i here?')
             adjust(errs)
             return errs
         else:
@@ -348,6 +358,8 @@ class Icp:
         :param src:  Array of source points
         :param tgt: Array of target points
         """
+        src = np.asarray(src)
+        tgt = np.asarray(tgt)
         self.nn = Loss.NearestNeighbor(tgt)
         # Should stay unchanged across program duration
         self.src = extend_1s(src)
@@ -374,7 +386,12 @@ class Icp:
 
             def _err():
                 src_ = src[idxs[:, 0]]
-                return np.sum(np.square(src_[:, :2] - tgt_match)) / idxs.shape[0]
+                # ic(np.square(src_[:, :2] - tgt_match))
+                err = np.sum(np.square(src_[:, :2] - tgt_match)) / idxs.shape[0]
+                # err_ = np.linalg.norm(src_[:, :2] - tgt_match, axis=0, ord=2).mean()
+                # ic(err, err_)
+                # assert err == err_
+                return err
 
             err_ = _err()
             d_err = abs(err - err_)
@@ -424,13 +441,39 @@ class TsfInitializer:
     """
     Given a set of 2D laser scan points, generate possible candidates of initial transformation
     """
-    def __init__(self, pts):
-        self.pts = pts
+    def __init__(self):
+        pass
 
-    def ransac_linear(self, labels=None, plot=False, reverse=False, return_ln=False):
+    @staticmethod
+    def rect_tsf_cands(pts, labels=None, kwargs_cands=None):
+        """
+        :param pts: A list of 2d points
+        :param labels: If given, `pts` are first separated, and RANSAC is performed on each cluster
+        :param kwargs_cands: See `TsfInitializer.ln2rect_tsf_cands`
+        :return: A list of rectangle transformation candidates based on RANSAC linear regression
+            If `labels` given, a dict of list
+        """
+        if kwargs_cands is None:
+            kwargs_cands = dict()
+
+        def _rect_tsf_cands(cluster):
+            cands = [TsfInitializer.ransac_linear(cluster, reverse=r) for r in [False, True]]
+            # ic(cands)
+            # ic(sum([TsfInitializer.ln2rect_tsf_cands(**kwargs_cands) for cand in cands], []))
+            # exit(1)
+            return sum([TsfInitializer.ln2rect_tsf_cands(cand, **kwargs_cands) for cand in cands], [])
+        if labels is None:
+            return _rect_tsf_cands(pts)
+        else:
+            d_cls = {lb: pts[np.where(labels == lb)] for lb in np.unique(labels)}
+            return {lb: _rect_tsf_cands(c) for lb, c in d_cls.items()}
+
+    @staticmethod
+    def ransac_linear(pts, labels=None, plot=False, reverse=False, return_ln=False):
         """
         Fit the set of points linearly
 
+        :param pts: A list of 2d points
         :param labels: If given, `pts` are first separated, and RANSAC is performed on each cluster
         :param reverse: If reversed, the independent and dependent axis in `pts` are flipped
         :param plot: If true, the result is visualized
@@ -441,10 +484,8 @@ class TsfInitializer:
         def _ransac_linear(cluster):
             cluster = np.asarray(cluster)
             ransac = linear_model.RANSACRegressor()
-            # ic(cluster)
             if reverse:
                 cluster = cluster[:, ::-1]
-                # ic(cluster)
 
             x, y = cluster[:, 0], cluster[:, 1]
             ransac.fit(x.reshape(-1, 1), y.reshape(-1, 1))
@@ -474,7 +515,6 @@ class TsfInitializer:
                 d = 9
                 ratio = (y.max()-y.min()) / (x.max()-x.min())
                 ratio = clipper(2**-2, 2**2)(ratio)
-                # ic(ratio)
                 plt.figure(figsize=(d, d/ratio if reverse else d*ratio))
                 cs = iter(sns.color_palette(palette='husl', n_colors=7))
                 plot_points(ins, c=next(cs), label='Inliers')
@@ -495,15 +535,15 @@ class TsfInitializer:
                 ret.append(end_pts)
             return tuple(ret)
         if labels is None:
-            return _ransac_linear(self.pts)
+            return _ransac_linear(pts)
         else:
-            d_cls = {lb: self.pts[np.where(labels == lb)] for lb in np.unique(labels)}
+            d_cls = {lb: pts[np.where(labels == lb)] for lb in np.unique(labels)}
             return {lb: _ransac_linear(c) for lb, c in d_cls.items()}
 
     @staticmethod
-    def propose_rect_tsf(line_seg, rect_dim=config('dimensions.KUKA'), return_mat=True, plot=False, no_flip=False):
+    def ln2rect_tsf_cands(line_seg, rect_dim=config('dimensions.KUKA'), return_mat=True, plot=False, no_flip=False):
         """
-        Given a line segment, propose possible transformations such that
+        Given a line segment, propose possible transformation candidates such that
             the rectangle, transformed from centroid of origin, matches the line segment
 
         :param line_seg: 2-tuple of (coefficient, centroid)
@@ -759,6 +799,7 @@ if __name__ == '__main__':
     # pick_cmap()
 
     dim_kuka = config('dimensions.KUKA')
+
     d_cls_res = config('heuristics.cluster_results.good')
     lbs = d_cls_res['labels']
     d_clusters = d_cls_res['clusters']
@@ -861,12 +902,11 @@ if __name__ == '__main__':
         pts_cls = d_clusters[11]
         ti = TsfInitializer(pts_cls)
         coef, center = ti.ransac_linear()
-        ic(ti.propose_rect_tsf((coef, center), dim_kuka, plot=True, return_mat=False))
+        ic(ti.ln2rect_tsf_cands((coef, center), dim_kuka, plot=True, return_mat=False))
     # check_init_proposal()
 
     def visualize_proposals():
         ti = TsfInitializer(pts_hsr)
-
         n_cls = len(d_clusters)
         cp = sns.color_palette(palette='husl', n_colors=n_cls)
         cs = iter(cp)
@@ -885,22 +925,150 @@ if __name__ == '__main__':
             ):
                 c = next(cs)
                 plt.plot(*end_pts, lw=1, c=c, label='Regression' + (', reversed' if r else ''))
-
-                tsfs = ti.propose_rect_tsf((coef, center), dim_kuka, no_flip=True)
-                # label = idx
-                # pts_cls = d_clusters[label]
-                for tsf in tsfs:
+                for tsf in ti.ln2rect_tsf_cands((coef, center), dim_kuka, no_flip=True):
                     plot_points(
                         apply_tsf_2d(pcr_kuka, tsf),
-                        lw=0.2, ms=0.2, alpha=0.3, c=c, label=f'Rectangle candidates'
+                        lw=0.2, ms=0.2, alpha=0.3, c=c, label='Rectangle candidates'
                     )
-
+        plot_points(
+            apply_tsf_2d(pcr_kuka, tsf_ideal),
+            lw=0.5, ms=0.25, c='black', label='Actual pose'
+        )
         plt.gca().set_aspect('equal')
         handles, labels_ = plt.gca().get_legend_handles_labels()
         by_label = dict(zip(labels_, handles))
         plt.legend(by_label.values(), by_label.keys())
-        # plt.legend()
         plt.title('Transformation proposals on HSR scan cluster, without flipping')
-
         plt.show()
-    visualize_proposals()
+    # visualize_proposals()
+
+    def icp_on_good_proposal():
+        pts_cls = d_clusters[11]
+
+        ti = TsfInitializer()
+        cands = ti.rect_tsf_cands(pts_cls, kwargs_cands=dict(return_mat=False))
+        cand = cands[0]  # This one is close to the hand-selected good initial transformation
+        ic(cand)
+        tsf1 = np.linalg.inv(tsl_n_angle2tsf(cand))
+        tsf2 = tsl_n_angle2tsf([-e for e in cand])
+
+        visualize(
+            pts_cls, pcr_kuka,
+            title='HSR locates KUKA, from the real cluster, translation proposed from RANSAC',
+            init_tsf=tsf1,
+            # mode='control'
+        )
+    # icp_on_good_proposal()
+
+    def icp_on_proposals():
+        ti = TsfInitializer()
+        d_tsfs = ti.rect_tsf_cands(pts_hsr, labels=lbs, kwargs_cands=dict(rect_dim=dim_kuka, return_mat=False))
+        err_by_tsl = []
+        for label, tsfs in d_tsfs.items():
+            # ic(len(tsfs), tsfs[:4])
+            pts_cls = d_clusters[label]
+            for tsf in tsfs:
+                tsf_ = np.linalg.inv(tsl_n_angle2tsf(tsf))
+                src, tgt = pts_cls, pcr_kuka
+                tsf_ = Icp(src, tgt)(tsf_)
+                error = Loss(tgt).pose_error(src, tsf_, is_mat=True)
+                # ic(tsf[:2], error)
+                err_by_tsl.append((*tsf[:2], error))
+        err_by_tsl = np.array(err_by_tsl)
+        err_thresh = 0.5  # Remove noise, exploding error
+        err_by_tsl = err_by_tsl[err_by_tsl[:, 2] < err_thresh]
+        ic(err_by_tsl.shape, err_by_tsl[:5])
+
+        x, y, z = err_by_tsl[:, 0], err_by_tsl[:, 1], err_by_tsl[:, 2]
+
+        # plt.figure(figsize=(9, 9))
+        ic(pts2bins(np.stack([x, y]).T, prec=0.5))
+        exit(1)
+        # plot_points(np.stack([x, y]).T, lw=0, ms=8)
+        # plt.show()
+        # ic(z)
+        # z = z.max() - z
+        # z = scipy.special.softmax(z)
+        # ic(z)
+        # ic(x, y, z)
+        prec = 0.25
+        mi_x, ma_x = (math.floor(x.min() / prec)-1)*prec, (math.ceil(x.max()/prec)+1)*prec
+        mi_y, ma_y = (math.floor(y.min() / prec)-1)*prec, (math.ceil(y.max()/prec)+1)*prec
+        ic(mi_x, ma_x, mi_y, ma_y)
+        x_grid = np.linspace(mi_x, ma_x, num=int((ma_x-mi_x)/prec + 1))
+        y_grid = np.linspace(mi_y, ma_y, num=int((ma_y-mi_y)/prec + 1))
+        ic(x_grid, y_grid)
+
+        # Linearly interpolate the data (x, y) on a grid defined by (xi, yi).
+        # triang = tri.Triangulation(x, y)
+        # interpolator = tri.LinearTriInterpolator(triang, z)
+        # Xi, Yi = np.meshgrid(xi, yi)
+        # zi = interpolator(Xi, Yi)
+
+        # Note that scipy.interpolate provides means to interpolate data on a grid
+        # as well. The following would be an alternative to the four lines above:
+        # from scipy.interpolate import griddata
+        Z_ = scipy.interpolate.griddata((x, y), z, (x_grid[None, :], y_grid[:, None]), method='nearest')
+        ic(Z_.shape)
+        # for row in z_i:
+        #     ic(row)
+
+        d = 9
+
+        ord_3d, ord_2d = 1, 20
+        fig, ax = plt.subplots(figsize=(d, d), subplot_kw=dict(projection='3d'))
+        X, Y = np.meshgrid(x_grid, y_grid)
+        kwargs_surf = dict(
+            zorder=ord_3d, antialiased=True,
+            alpha=0.9, cmap='Spectral_r', edgecolor='black', lw=0.3
+        )
+        Z_ = -Z_
+
+        bot, top = get_offset(Z_, frac=8)
+
+        surf = ax.plot_surface(X, Y, -Z_, **kwargs_surf)
+        # ax.contourf(X, Y, -Z_, levels=14, linewidths=0.5, colors='k')
+        kwargs_cont = dict(
+            zorder=ord_3d, antialiased=True,
+            linewidths=1, levels=np.linspace(Z_.min(), Z_.max(), 2 ** 4), offset=bot, zdir='z',
+            cmap='Spectral_r'
+        )
+        ct = ax.contour(X, Y, Z_, **kwargs_cont)
+        # ax.plot(x, y, z)
+        # ic(np.stack([x, y]).shape)
+        plot_points(np.stack([x, y]).T, zs=-z, ms=4, lw=0)
+
+        lb_tgt = 'Laser scan, target'
+
+        cp = sns.color_palette(palette='husl', n_colors=7)
+        # cp = list(reversed(cp)) if inverse_loss else cp
+        cs = iter(cp)
+        pcr = pcr_kuka
+        plot_points([[0, 0]], zs=top, zorder=ord_2d, ms=10, alpha=0.5)
+        c = next(cs)
+        plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
+        labels = lbs
+        pts = pts_hsr
+        if labels is not None:
+            plot_cluster(pts, labels, new_fig=False, show_eclipse=False, line_kwargs=dict(
+                zorder=ord_2d, zs=top, label=lb_tgt
+            ))
+        else:
+            plot_points(pts, zorder=ord_2d, zs=top, c=next(cs), label=lb_tgt)
+        if tsf_ideal is not None:  # Illustrate the ideal translation+-
+            plot_points(
+                apply_tsf_2d(pcr, tsf_ideal),
+                zorder=ord_2d, zs=top, c=c, alpha=0.7,
+                label='Point cloud representation at actual pose'
+            )
+        # fig.colorbar(ct, shrink=0.5, aspect=2 ** 5, pad=2 ** -4)
+        plt.xlabel('Translation in X (m)')
+        plt.ylabel('Translation in y (m)')
+        ax.set_zlabel('Mean Squared Error')
+        t = 'MSE by translation, interpolated'
+        plt.title(t)
+        plt.show()
+
+        # tsfs = sum(d_tsfs.values(), [])
+        # ic(len(tsfs))
+    icp_on_proposals()

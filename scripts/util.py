@@ -1,7 +1,7 @@
 import glob
 import json
 import os.path
-from math import pi, acos, degrees, sqrt
+import math
 from functools import reduce
 from typing import Union
 from collections.abc import Iterable
@@ -91,7 +91,7 @@ def pts2max_dist(pts):
     n = pts.shape[0]
     idxs = ((i, j) for i in range(n-1) for j in range(i, n))
     # ic(list(idxs))
-    return sqrt(max(dist(pts[a], pts[b]) for a, b in idxs))
+    return math.sqrt(max(dist(pts[a], pts[b]) for a, b in idxs))
 
 
 def clipper(low, high):
@@ -106,7 +106,7 @@ def get_3rd_side(a, b):
     Returns hypotenuse of a right-angled triangle, given its other sides
     """
     # return np.sqrt(np.sum(np.square(mags)))
-    return sqrt(a**2 + b**2)
+    return math.sqrt(a**2 + b**2)
 
 
 class JsonWriter:
@@ -239,7 +239,7 @@ def tsf2tsl_n_angle(tsf):
     """
     :return: 2-tuple of 2D translation and angle in radians from transformation matrix
     """
-    return tsf[:2, 2], acos(tsf[0][0])
+    return tsf[:2, 2], math.acos(tsf[0][0])
 
 
 def apply_tsf_2d(arr, tsf):
@@ -268,7 +268,7 @@ def get_rect_pointcloud(dim, n=240, visualize=False):
     ln, wd = dim['length'], dim['width'] if isinstance(dim, dict) else dim
     r = max(ln, wd)
     r = np.full(n, r)
-    theta = np.linspace(0, 2 * pi, num=n+1)[:-1]
+    theta = np.linspace(0, 2 * math.pi, num=n+1)[:-1]
     x, y = polar2planar(r, theta)
     boundaries = (-ln/2, -wd/2, ln/2, wd/2)
 
@@ -460,7 +460,7 @@ def plot_icp_result(
             plt.suptitle(t_)
 
         tsl, theta = tsf2tsl_n_angle(tsf_)
-        ic(tsf_, tsl, degrees(theta))
+        ic(tsf_, tsl, math.degrees(theta))
 
         unit_sqr = np.array([
             [0, 0],
@@ -655,6 +655,32 @@ def get_offset(arr, frac=2**4):
     return mi-diff, ma+diff
 
 
+def pts2bins(pts, prec=0.25):
+    """
+    :param pts: List of 2d points
+    :param prec: Width of each bin
+    :return: A dictionary of bin centers and points in the bin
+    """
+    # for pt in pts:
+        # def val2bin_int(val):
+        #     return math.ceil(val / prec) if val > 0 else math.floor(pt[1] / prec)
+        # f =
+        # loc = math.floor(pt[0] / prec), math.floor(pt[1] / prec)
+        # ic(loc, pt)
+    locs_pt = {tuple(pt.tolist()): (math.floor(pt[0] / prec), math.floor(pt[1] / prec)) for pt in pts}
+    d_bin = dict()
+    for pt, loc in locs_pt.items():
+        # ic(pt, loc)
+        if loc in d_bin:
+            d_bin[loc].append(pt)
+        else:
+            d_bin[loc] = [pt]
+
+    def unit2val(u):
+        return (u+0.5)*prec
+    return {(unit2val(k1), unit2val(k2)): v for (k1, k2), v in d_bin.items()}
+
+
 def plot_grid_search(
         pcr, pts, opns_x, opns_y, opns_ang, errs, labels=None,
         interp=True, inverse_loss=False, inverse_pts=False,
@@ -720,7 +746,7 @@ def plot_grid_search(
     c = next(cs)
     plot_points(pcr, zorder=ord_2d, zs=top, c=c, alpha=0.5, label='Point cloud representation, source')
     if labels is not None:
-        plot_cluster(pts, labels, show=False, new=False, eclipse=False, line_kwargs=dict(
+        plot_cluster(pts, labels, new_fig=False, show_eclipse=False, line_kwargs=dict(
             zorder=ord_2d, zs=top, label=lb_tgt
         ))
     else:
@@ -753,7 +779,7 @@ def plot_grid_search(
     fig.colorbar(surf, shrink=0.5, aspect=2**5, pad=2**-4)
     plt.xlabel('Translation in X (m)')
     plt.ylabel('Translation in y (m)')
-    ax.set_zlabel(zlabel)
+    ax.set_zlabel(zlabel + ', inverted' if inverse_loss else '')
     plt.legend()
     handles, labels_ = plt.gca().get_legend_handles_labels()  # Distinct labels
     by_label = dict(zip(labels_, handles))
